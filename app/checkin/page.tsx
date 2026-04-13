@@ -80,4 +80,85 @@ export default function CheckIn() {
             <label className="text-sm text-gray-600">Date</label>
             <input type="date" value={form.date} onChange={e => f('date', e.target.value)} className="w-full border rounded-lg px-3 py-2 mt-1" />
           </div>
-        </di
+        </div>
+        <div>
+          <label className="text-sm text-gray-600">Morning Weight (kg)</label>
+          <input type="number" step="0.01" value={form.weight} onChange={e => f('weight', e.target.value)} className="w-full border rounded-lg px-3 py-2 mt-1" placeholder="e.g. 76.50" />
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl shadow p-4 space-y-4">
+        <h2 className="font-bold text-red-700">🔴 Non-Negotiables</h2>
+        <Bool label="1. OMAD" k="omad" />
+        <div>
+          <label className="text-sm text-gray-600">What did you eat?</label>
+          <textarea value={form.meal_description} onChange={e => f('meal_description', e.target.value)} className="w-full border rounded-lg px-3 py-2 mt-1" rows={2} placeholder="Describe your meal..." />
+        </div>
+        <div>
+          <label className="text-sm text-gray-600">2. Steps</label>
+          <input type="number" value={form.steps} onChange={e => f('steps', e.target.value)} className="w-full border rounded-lg px-3 py-2 mt-1" placeholder="e.g. 12500" />
+        </div>
+        <Bool label="3. Meditate" k="meditate" />
+        {form.meditate && (
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <label className="text-xs text-gray-500">Start</label>
+              <input type="time" value={form.meditate_start} onChange={e => f('meditate_start', e.target.value)} className="w-full border rounded-lg px-2 py-1 mt-1" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500">End</label>
+              <input type="time" value={form.meditate_end} onChange={e => f('meditate_end', e.target.value)} className="w-full border rounded-lg px-2 py-1 mt-1" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500">Mins</label>
+              <input type="number" value={form.meditate_mins} onChange={e => f('meditate_mins', e.target.value)} className="w-full border rounded-lg px-2 py-1 mt-1" placeholder="23" />
+            </div>
+          </div>
+        )}
+        <div className="grid grid-cols-3 gap-2">
+          <div>
+            <label className="text-xs text-gray-500">Sleep Hours</label>
+            <input type="number" step="0.1" value={form.sleep_hours} onChange={e => f('sleep_hours', e.target.value)} className="w-full border rounded-lg px-2 py-1 mt-1" placeholder="7" />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500">Sleep Time</label>
+            <input type="time" value={form.sleep_time} onChange={e => f('sleep_time', e.target.value)} className="w-full border rounded-lg px-2 py-1 mt-1" />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500">Wake Time</label>
+            <input type="time" value={form.wake_time} onChange={e => f('wake_time', e.target.value)} className="w-full border rounded-lg px-2 py-1 mt-1" />
+          </div>
+        </div>
+        <Bool label="5. Zero Content" k="zero_content" />
+      </div>
+
+      <div className="bg-white rounded-xl shadow p-4 space-y-4">
+        <h2 className="font-bold text-green-700">🟢 Best Effort</h2>
+        <Bool label="6. Manifest" k="manifest" />
+        <div>
+          <label className="text-sm text-gray-600">7. Water (litres)</label>
+          <input type="number" step="0.1" value={form.water_liters} onChange={e => f('water_liters', e.target.value)} className="w-full border rounded-lg px-3 py-2 mt-1" placeholder="e.g. 3.2" />
+        </div>
+        <Bool label="8. Yoga Sutras" k="yoga_sutras" />
+        <Bool label="9. Zero Inbox" k="zero_inbox" />
+        <Bool label="10. Workout" k="workout" />
+        {form.workout && (
+          <div>
+            <label className="text-sm text-gray-600">Workout Type</label>
+            <input type="text" value={form.workout_type} onChange={e => f('workout_type', e.target.value)} className="w-full border rounded-lg px-3 py-2 mt-1" placeholder="e.g. Swimming, Running" />
+          </div>
+        )}
+        <div>
+          <label className="text-sm text-gray-600">Notes</label>
+          <textarea value={form.notes} onChange={e => f('notes', e.target.value)} className="w-full border rounded-lg px-3 py-2 mt-1" rows={2} placeholder="How are you feeling today?" />
+        </div>
+      </div>
+
+      <button onClick={save} disabled={saving}
+        className="w-full py-4 rounded-2xl text-white font-bold text-lg transition-all"
+        style={{ background: saving ? '#9ca3af' : 'linear-gradient(135deg, #1a4a2e, #16a34a)' }}>
+        {saving ? 'Saving...' : saved ? '✅ Saved!' : 'Save Day'}
+      </button>
+    </div>
+  )
+}
