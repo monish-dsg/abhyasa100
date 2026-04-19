@@ -40,6 +40,12 @@ const DEFAULT_FORM = {
   zero_inbox: false, workout: false, workout_type: '', notes: ''
 }
 
+const PHOTO_TYPES = [
+  { key: 'scale', label: '⚖️ Weighing Scale', icon: '⚖️' },
+  { key: 'food', label: '🍽️ Food / Meal', icon: '🍽️' },
+  { key: 'selfie', label: '🤳 Daily Selfie', icon: '🤳' },
+]
+
 export default function CheckIn() {
   const [form, setForm] = useState({ ...DEFAULT_FORM, day: String(getDayNumber()), date: getDateForDay(getDayNumber()) })
   const [saving, setSaving] = useState(false)
@@ -48,14 +54,31 @@ export default function CheckIn() {
   const [loadedDay, setLoadedDay] = useState<number | null>(null)
   const [existingDays, setExistingDays] = useState<number[]>([])
 
-  // Fetch list of existing days on mount
+  // Photo state
+  const [photos, setPhotos] = useState<Record<string, File | null>>({ scale: null, food: null, selfie: null })
+  const [photoPreviews, setPhotoPreviews] = useState<Record<string, string>>({ scale: '', food: '', selfie: '' })
+  const [existingPhotos, setExistingPhotos] = useState<Record<string, string>>({ scale: '', food: '', selfie: '' })
+  const [uploadingPhotos, setUploadingPhotos] = useState(false)
+
   useEffect(() => {
     supabase.from('daily_logs').select('day').order('day').then(({ data }) => {
       if (data) setExistingDays(data.map(d => d.day))
     })
   }, [saved])
 
-  // Load existing data when day number changes
+  const loadPhotosForDay = async (dayNum: number) => {
+    const { data } = await supabase.from('photos').select('*').eq('day', dayNum)
+    const ep: Record<string, string> = { scale: '', food: '', selfie: '' }
+    if (data) {
+      data.forEach((p: any) => {
+        if (p.type && ep.hasOwnProperty(p.type)) {
+          ep[p.type] = p.photo_url
+        }
+      })
+    }
+    setExistingPhotos(ep)
+  }
+
   const loadDay = async (dayNum: number) => {
     if (!dayNum || dayNum < 1 || dayNum > 100) return
     setLoading(true)
@@ -89,10 +112,15 @@ export default function CheckIn() {
       })
       setLoadedDay(dayNum)
     } else {
-      // No data for this day — reset form but keep day & date
       setForm({ ...DEFAULT_FORM, day: String(dayNum), date: getDateForDay(dayNum) })
       setLoadedDay(null)
     }
+
+    // Load photos for this day
+    await loadPhotosForDay(dayNum)
+    // Clear any new photo selections
+    setPhotos({ scale: null, food: null, selfie: null })
+    setPhotoPreviews({ scale: '', food: '', selfie: '' })
 
     setLoading(false)
   }
@@ -106,6 +134,61 @@ export default function CheckIn() {
       f('date', getDateForDay(num))
       loadDay(num)
     }
+  }
+
+  const handlePhotoSelect = (type: string, file: File | null) => {
+    setPhotos(p => ({ ...p, [type]: file }))
+    if (file) {
+      const url = URL.createObjectURL(file)
+      setPhotoPreviews(p => ({ ...p, [type]: url }))
+    } else {
+      setPhotoPreviews(p => ({ ...p, [type]: '' }))
+    }
+  }
+
+  const uploadPhotos = async (dayNum: number) => {
+    const photoTypes = Object.entries(photos).filter(([_, file]) => file !== null)
+    if (photoTypes.length === 0) return
+
+    setUploadingPhotos(true)
+
+    for (const [type, file] of photoTypes) {
+      if (!file) continue
+      const ext = file.name.split('.').pop() || 'jpg'
+      const filePath = `day-${dayNum}/${type}.${ext}`
+
+      // Upload to storage
+      const { error: uploadError } = await supabase.storage
+        .from('photos')
+        .upload(filePath, file, { upsert: true })
+
+      if (uploadError) {
+        console.error(`Failed to upload ${type}:`, uploadError)
+        continue
+      }
+
+      // Get public URL
+      const { data: urlData } = supabase.storage.from('photos').getPublicUrl(filePath)
+      const photo_url = urlData.publicUrl
+
+      // Check if a photo of this type already exists for this day
+      const { data: existing } = await supabase
+        .from('photos')
+        .select('id')
+        .eq('day', dayNum)
+        .eq('type', type)
+        .single()
+
+      if (existing) {
+        // Update existing
+        await supabase.from('photos').update({ photo_url, caption: type }).eq('id', existing.id)
+      } else {
+        // Insert new
+        await supabase.from('photos').insert({ day: dayNum, type, photo_url, caption: type })
+      }
+    }
+
+    setUploadingPhotos(false)
   }
 
   const Bool = ({ label, k }: { label: string, k: string }) => (
@@ -125,10 +208,12 @@ export default function CheckIn() {
   const save = async () => {
     if (!form.day) return alert('Please enter day number!')
     setSaving(true)
+    const dayNum = +form.day
     const { color, score } = getColor({ ...form, steps: +form.steps, sleep_hours: +form.sleep_hours, water_liters: +form.water_liters })
-    await supabase.from('daily_logs').upsert({ day: +form.day, date: form.date, weight: +form.weight, color, score, notes: form.notes }, { onConflict: 'day' })
+
+    await supabase.from('daily_logs').upsert({ day: dayNum, date: form.date, weight: +form.weight, color, score, notes: form.notes }, { onConflict: 'day' })
     await supabase.from('habits').upsert({
-      day: +form.day, omad: form.omad, meal_description: form.meal_description,
+      day: dayNum, omad: form.omad, meal_description: form.meal_description,
       steps: +form.steps, meditate: form.meditate, meditate_start: form.meditate_start || null,
       meditate_end: form.meditate_end || null, meditate_mins: +form.meditate_mins || null,
       sleep_hours: +form.sleep_hours, sleep_time: form.sleep_time || null,
@@ -137,9 +222,19 @@ export default function CheckIn() {
       yoga_sutras: form.yoga_sutras, zero_inbox: form.zero_inbox,
       workout: form.workout, workout_type: form.workout_type || null
     }, { onConflict: 'day' })
+
+    // Upload any selected photos
+    await uploadPhotos(dayNum)
+
     setSaving(false)
     setSaved(true)
-    setLoadedDay(+form.day)
+    setLoadedDay(dayNum)
+
+    // Reload photos to show updated
+    await loadPhotosForDay(dayNum)
+    setPhotos({ scale: null, food: null, selfie: null })
+    setPhotoPreviews({ scale: '', food: '', selfie: '' })
+
     setTimeout(() => setSaved(false), 3000)
   }
 
@@ -172,7 +267,6 @@ export default function CheckIn() {
           <p className="text-xs text-blue-600 text-center font-medium">🆕 New entry for Day {form.day}</p>
         )}
 
-        {/* Quick jump to existing days */}
         {existingDays.length > 0 && (
           <div>
             <p className="text-xs text-gray-500 mb-1">Quick jump to logged days:</p>
@@ -197,6 +291,44 @@ export default function CheckIn() {
             <input type="number" step="0.01" value={form.weight} onChange={e => f('weight', e.target.value)} className="w-full border rounded-lg px-3 py-2 mt-1" placeholder="e.g. 76.50" />
           </div>
         </div>
+      </div>
+
+      {/* Photo Upload Section */}
+      <div className="bg-white rounded-xl shadow p-4 space-y-4">
+        <h2 className="font-bold text-purple-700">📸 Daily Photos</h2>
+        {PHOTO_TYPES.map(({ key, label, icon }) => (
+          <div key={key} className="space-y-2">
+            <label className="text-sm text-gray-600 font-medium">{label}</label>
+
+            {/* Show existing photo if present */}
+            {existingPhotos[key] && !photoPreviews[key] && (
+              <div className="relative">
+                <img src={existingPhotos[key]} alt={label}
+                  className="w-full h-40 object-cover rounded-lg border" />
+                <span className="absolute top-2 left-2 bg-green-600 text-white text-xs px-2 py-1 rounded-full">✅ Uploaded</span>
+              </div>
+            )}
+
+            {/* Show new photo preview */}
+            {photoPreviews[key] && (
+              <div className="relative">
+                <img src={photoPreviews[key]} alt={`New ${label}`}
+                  className="w-full h-40 object-cover rounded-lg border border-blue-300" />
+                <span className="absolute top-2 left-2 bg-blue-600 text-white text-xs px-2 py-1 rounded-full">🆕 New</span>
+                <button onClick={() => handlePhotoSelect(key, null)}
+                  className="absolute top-2 right-2 bg-red-500 text-white text-xs px-2 py-1 rounded-full">✕ Remove</button>
+              </div>
+            )}
+
+            <label className="block">
+              <span className="inline-block px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium text-gray-700 cursor-pointer transition-all">
+                {icon} {existingPhotos[key] ? 'Replace photo' : 'Choose photo'}
+              </span>
+              <input type="file" accept="image/*" capture="environment" className="hidden"
+                onChange={e => handlePhotoSelect(key, e.target.files?.[0] || null)} />
+            </label>
+          </div>
+        ))}
       </div>
 
       <div className="bg-white rounded-xl shadow p-4 space-y-4">
@@ -266,10 +398,10 @@ export default function CheckIn() {
         </div>
       </div>
 
-      <button onClick={save} disabled={saving}
+      <button onClick={save} disabled={saving || uploadingPhotos}
         className="w-full py-4 rounded-2xl text-white font-bold text-lg transition-all"
-        style={{ background: saving ? '#9ca3af' : saved ? '#16a34a' : 'linear-gradient(135deg, #1a4a2e, #16a34a)' }}>
-        {saving ? 'Saving...' : saved ? '✅ Saved!' : loadedDay ? `Update Day ${form.day}` : `Save Day ${form.day}`}
+        style={{ background: (saving || uploadingPhotos) ? '#9ca3af' : saved ? '#16a34a' : 'linear-gradient(135deg, #1a4a2e, #16a34a)' }}>
+        {uploadingPhotos ? '📸 Uploading photos...' : saving ? 'Saving...' : saved ? '✅ Saved!' : loadedDay ? `Update Day ${form.day}` : `Save Day ${form.day}`}
       </button>
     </div>
   )
