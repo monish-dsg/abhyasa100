@@ -19,11 +19,14 @@ export default function Dashboard() {
   }, [])
 
   const latest = logs[logs.length - 1]
+  const day1 = logs.find(l => l.day === 1)
+  const startWeight = day1?.weight ?? latest?.weight ?? 0
+  const targetWeight = 66
   const darkGreen = logs.filter(l => l.color === 'Dark Green').length
   const green = logs.filter(l => l.color === 'Green').length
   const orange = logs.filter(l => l.color === 'Orange').length
   const red = logs.filter(l => l.color === 'Red').length
-  const progress = latest ? ((78.35 - latest.weight) / (78.35 - 66)) * 100 : 0
+  const progress = (startWeight && latest) ? ((startWeight - latest.weight) / (startWeight - targetWeight)) * 100 : 0
 
   return (
     <div className="space-y-6">
@@ -36,15 +39,15 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl p-4 shadow text-center">
           <p className="text-gray-500 text-sm">Start Weight</p>
-          <p className="text-2xl font-bold text-green-800">78.35 kg</p>
+          <p className="text-2xl font-bold text-green-800">{startWeight ? `${startWeight} kg` : '—'}</p>
         </div>
         <div className="bg-white rounded-xl p-4 shadow text-center">
           <p className="text-gray-500 text-sm">Current Weight</p>
-          <p className="text-2xl font-bold text-green-800">{latest?.weight ?? '—'} kg</p>
+          <p className="text-2xl font-bold text-green-800">{latest?.weight ? `${latest.weight} kg` : '—'}</p>
         </div>
         <div className="bg-white rounded-xl p-4 shadow text-center">
           <p className="text-gray-500 text-sm">Target Weight</p>
-          <p className="text-2xl font-bold text-green-800">66 kg</p>
+          <p className="text-2xl font-bold text-green-800">{targetWeight} kg</p>
         </div>
         <div className="bg-white rounded-xl p-4 shadow text-center">
           <p className="text-gray-500 text-sm">Days Done</p>
@@ -58,7 +61,7 @@ export default function Dashboard() {
           <div className="bg-green-600 h-4 rounded-full transition-all" style={{ width: `${Math.min(100, Math.max(0, progress))}%` }} />
         </div>
         <p className="text-sm text-gray-500 mt-1 text-center">
-          {latest ? (78.35 - latest.weight).toFixed(2) : 0} kg lost · {latest ? (latest.weight - 66).toFixed(2) : 12.35} kg to go
+          {(startWeight && latest) ? `${(startWeight - latest.weight).toFixed(2)} kg lost · ${(latest.weight - targetWeight).toFixed(2)} kg to go` : 'Weigh in on Day 1 to start tracking'}
         </p>
       </div>
 
