@@ -2,11 +2,11 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
-const COLOR_MAP: Record<string, { bg: string; text: string; label: string }> = {
-  'Dark Green': { bg: '#1b4332', text: '#ffffff', label: '🌑 Perfect' },
-  'Green': { bg: '#40916c', text: '#ffffff', label: '🟢 Solid' },
-  'Orange': { bg: '#e76f51', text: '#ffffff', label: '🟠 Slipped' },
-  'Red': { bg: '#e63946', text: '#ffffff', label: '🔴 Missed' },
+const COLOR_MAP: Record<string, { bg: string; text: string }> = {
+  'Dark Green': { bg: '#1b4332', text: '#ffffff' },
+  'Green': { bg: '#40916c', text: '#ffffff' },
+  'Orange': { bg: '#e76f51', text: '#ffffff' },
+  'Red': { bg: '#e63946', text: '#ffffff' },
 }
 
 export default function Dashboard() {
@@ -31,6 +31,12 @@ export default function Dashboard() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
+      <style>{`
+        .log-row { transition: background 0.2s ease; }
+        .log-row:hover { background: rgba(0,0,0,0.02); }
+        .cal-cell { transition: transform 0.15s ease; }
+        .cal-cell:hover { transform: scale(1.1); }
+      `}</style>
 
       {/* Hero */}
       <div style={{
@@ -46,15 +52,9 @@ export default function Dashboard() {
         <p style={{ fontSize: '0.6875rem', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', opacity: 0.7, marginBottom: 8 }}>
           100-DAY DISCIPLINE CHALLENGE
         </p>
-        <h1 style={{ fontSize: '2rem', fontWeight: 700, letterSpacing: '-0.03em', margin: 0 }}>
-          Abhyasa100
-        </h1>
-        <p style={{ fontSize: '0.9375rem', opacity: 0.7, marginTop: 6, fontWeight: 400 }}>
-          Monish Shah · Day {logs.length} of 100
-        </p>
-        <p style={{ fontSize: '0.8125rem', opacity: 0.5, marginTop: 4, fontStyle: 'italic' }}>
-          Practice and Desirelessness
-        </p>
+        <h1 style={{ fontSize: '2rem', fontWeight: 700, letterSpacing: '-0.03em', margin: 0 }}>Abhyasa100</h1>
+        <p style={{ fontSize: '0.9375rem', opacity: 0.7, marginTop: 6, fontWeight: 400 }}>Monish Shah · Day {logs.length} of 100</p>
+        <p style={{ fontSize: '0.8125rem', opacity: 0.5, marginTop: 4, fontStyle: 'italic' }}>Practice and Desirelessness</p>
       </div>
 
       {/* Stats Row */}
@@ -83,13 +83,7 @@ export default function Dashboard() {
           </p>
         </div>
         <div style={{ background: '#f0f0f0', borderRadius: 100, height: 8, overflow: 'hidden' }}>
-          <div style={{
-            width: `${progress}%`,
-            height: '100%',
-            borderRadius: 100,
-            background: 'linear-gradient(90deg, #2d6a4f, #40916c)',
-            transition: 'width 0.8s cubic-bezier(0.4, 0, 0.2, 1)',
-          }} />
+          <div style={{ width: `${progress}%`, height: '100%', borderRadius: 100, background: 'linear-gradient(90deg, #2d6a4f, #40916c)', transition: 'width 0.8s cubic-bezier(0.4, 0, 0.2, 1)' }} />
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
           <p style={{ fontSize: '0.75rem', color: '#86868b' }}>{startWeight || '—'} kg</p>
@@ -105,13 +99,7 @@ export default function Dashboard() {
           { count: orange, bg: '#e76f51', label: 'Slipped', sub: '1 missed' },
           { count: red, bg: '#e63946', label: 'Missed', sub: '2+ missed' },
         ].map(c => (
-          <div key={c.label} style={{
-            background: c.bg,
-            borderRadius: 'var(--radius)',
-            padding: '20px 16px',
-            textAlign: 'center',
-            color: 'white',
-          }}>
+          <div key={c.label} style={{ background: c.bg, borderRadius: 16, padding: '20px 16px', textAlign: 'center', color: 'white' }}>
             <p style={{ fontSize: '2rem', fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 1 }}>{c.count}</p>
             <p style={{ fontSize: '0.8125rem', fontWeight: 600, marginTop: 4 }}>{c.label}</p>
             <p style={{ fontSize: '0.6875rem', opacity: 0.6, marginTop: 2 }}>{c.sub}</p>
@@ -127,19 +115,12 @@ export default function Dashboard() {
             const log = logs.find(l => l.day === i + 1)
             const colorInfo = log ? COLOR_MAP[log.color] : null
             return (
-              <div key={i} style={{
+              <div key={i} className="cal-cell" style={{
                 background: colorInfo ? colorInfo.bg : '#f0f0f0',
                 color: colorInfo ? colorInfo.text : '#c7c7cc',
-                borderRadius: 8,
-                padding: '8px 0',
-                textAlign: 'center',
-                fontSize: '0.6875rem',
-                fontWeight: 600,
-                transition: 'transform 0.2s ease',
-                cursor: log ? 'pointer' : 'default',
-              }}
-              title={log ? `Day ${i+1}: ${log.color} (${log.score}/10)` : `Day ${i+1}`}
-              >
+                borderRadius: 8, padding: '8px 0', textAlign: 'center',
+                fontSize: '0.6875rem', fontWeight: 600, cursor: log ? 'pointer' : 'default',
+              }} title={log ? `Day ${i+1}: ${log.color} (${log.score}/10)` : `Day ${i+1}`}>
                 {i + 1}
               </div>
             )
@@ -158,29 +139,18 @@ export default function Dashboard() {
           </div>
         ) : (
           [...logs].reverse().map((l, i) => (
-            <div key={l.id} style={{
-              padding: '16px 24px',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
+            <div key={l.id} className="log-row" style={{
+              padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
               borderBottom: i < logs.length - 1 ? '1px solid rgba(0,0,0,0.04)' : 'none',
-              transition: 'background 0.2s ease',
-            }}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.02)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-            >
+            }}>
               <div>
                 <span style={{ fontSize: '0.9375rem', fontWeight: 600, color: '#1d1d1f' }}>Day {l.day}</span>
                 <span style={{ fontSize: '0.75rem', color: '#86868b', marginLeft: 10 }}>{l.date}</span>
                 {l.weight > 0 && <span style={{ fontSize: '0.75rem', color: '#86868b', marginLeft: 10 }}>{l.weight} kg</span>}
               </div>
               <div style={{
-                background: COLOR_MAP[l.color]?.bg || '#f0f0f0',
-                color: 'white',
-                padding: '4px 14px',
-                borderRadius: 100,
-                fontSize: '0.75rem',
-                fontWeight: 600,
+                background: COLOR_MAP[l.color]?.bg || '#f0f0f0', color: 'white',
+                padding: '4px 14px', borderRadius: 100, fontSize: '0.75rem', fontWeight: 600,
               }}>
                 {l.score}/10
               </div>
