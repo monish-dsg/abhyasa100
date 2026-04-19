@@ -41,9 +41,9 @@ const DEFAULT_FORM = {
 }
 
 const PHOTO_TYPES = [
-  { key: 'scale', label: '⚖️ Weighing Scale', icon: '⚖️' },
-  { key: 'food', label: '🍽️ Food / Meal', icon: '🍽️' },
-  { key: 'selfie', label: '🤳 Daily Selfie', icon: '🤳' },
+  { key: 'scale', label: 'Weighing Scale', icon: '⚖️' },
+  { key: 'food', label: 'Food / Meal', icon: '🍽️' },
+  { key: 'selfie', label: 'Daily Selfie', icon: '🤳' },
 ]
 
 export default function CheckIn() {
@@ -53,8 +53,6 @@ export default function CheckIn() {
   const [loading, setLoading] = useState(false)
   const [loadedDay, setLoadedDay] = useState<number | null>(null)
   const [existingDays, setExistingDays] = useState<number[]>([])
-
-  // Photo state
   const [photos, setPhotos] = useState<Record<string, File | null>>({ scale: null, food: null, selfie: null })
   const [photoPreviews, setPhotoPreviews] = useState<Record<string, string>>({ scale: '', food: '', selfie: '' })
   const [existingPhotos, setExistingPhotos] = useState<Record<string, string>>({ scale: '', food: '', selfie: '' })
@@ -69,45 +67,29 @@ export default function CheckIn() {
   const loadPhotosForDay = async (dayNum: number) => {
     const { data } = await supabase.from('photos').select('*').eq('day', dayNum)
     const ep: Record<string, string> = { scale: '', food: '', selfie: '' }
-    if (data) {
-      data.forEach((p: any) => {
-        if (p.type && ep.hasOwnProperty(p.type)) {
-          ep[p.type] = p.photo_url
-        }
-      })
-    }
+    if (data) data.forEach((p: any) => { if (p.type && ep.hasOwnProperty(p.type)) ep[p.type] = p.photo_url })
     setExistingPhotos(ep)
   }
 
   const loadDay = async (dayNum: number) => {
     if (!dayNum || dayNum < 1 || dayNum > 100) return
     setLoading(true)
-
     const { data: habits } = await supabase.from('habits').select('*').eq('day', dayNum).single()
     const { data: log } = await supabase.from('daily_logs').select('*').eq('day', dayNum).single()
-
     if (habits || log) {
       setForm({
-        day: String(dayNum),
-        date: log?.date || getDateForDay(dayNum),
+        day: String(dayNum), date: log?.date || getDateForDay(dayNum),
         weight: log?.weight ? String(log.weight) : '',
-        omad: habits?.omad ?? false,
-        meal_description: habits?.meal_description || '',
+        omad: habits?.omad ?? false, meal_description: habits?.meal_description || '',
         steps: habits?.steps ? String(habits.steps) : '',
-        meditate: habits?.meditate ?? false,
-        meditate_start: habits?.meditate_start || '',
-        meditate_end: habits?.meditate_end || '',
-        meditate_mins: habits?.meditate_mins ? String(habits.meditate_mins) : '',
+        meditate: habits?.meditate ?? false, meditate_start: habits?.meditate_start || '',
+        meditate_end: habits?.meditate_end || '', meditate_mins: habits?.meditate_mins ? String(habits.meditate_mins) : '',
         sleep_hours: habits?.sleep_hours ? String(habits.sleep_hours) : '',
-        sleep_time: habits?.sleep_time || '',
-        wake_time: habits?.wake_time || '',
-        zero_content: habits?.zero_content ?? false,
-        manifest: habits?.manifest ?? false,
+        sleep_time: habits?.sleep_time || '', wake_time: habits?.wake_time || '',
+        zero_content: habits?.zero_content ?? false, manifest: habits?.manifest ?? false,
         water_liters: habits?.water_liters ? String(habits.water_liters) : '',
-        yoga_sutras: habits?.yoga_sutras ?? false,
-        zero_inbox: habits?.zero_inbox ?? false,
-        workout: habits?.workout ?? false,
-        workout_type: habits?.workout_type || '',
+        yoga_sutras: habits?.yoga_sutras ?? false, zero_inbox: habits?.zero_inbox ?? false,
+        workout: habits?.workout ?? false, workout_type: habits?.workout_type || '',
         notes: log?.notes || ''
       })
       setLoadedDay(dayNum)
@@ -115,13 +97,9 @@ export default function CheckIn() {
       setForm({ ...DEFAULT_FORM, day: String(dayNum), date: getDateForDay(dayNum) })
       setLoadedDay(null)
     }
-
-    // Load photos for this day
     await loadPhotosForDay(dayNum)
-    // Clear any new photo selections
     setPhotos({ scale: null, food: null, selfie: null })
     setPhotoPreviews({ scale: '', food: '', selfie: '' })
-
     setLoading(false)
   }
 
@@ -130,17 +108,13 @@ export default function CheckIn() {
   const handleDayChange = (val: string) => {
     f('day', val)
     const num = parseInt(val)
-    if (num >= 1 && num <= 100) {
-      f('date', getDateForDay(num))
-      loadDay(num)
-    }
+    if (num >= 1 && num <= 100) { f('date', getDateForDay(num)); loadDay(num) }
   }
 
   const handlePhotoSelect = (type: string, file: File | null) => {
     setPhotos(p => ({ ...p, [type]: file }))
     if (file) {
-      const url = URL.createObjectURL(file)
-      setPhotoPreviews(p => ({ ...p, [type]: url }))
+      setPhotoPreviews(p => ({ ...p, [type]: URL.createObjectURL(file) }))
     } else {
       setPhotoPreviews(p => ({ ...p, [type]: '' }))
     }
@@ -149,55 +123,41 @@ export default function CheckIn() {
   const uploadPhotos = async (dayNum: number) => {
     const photoTypes = Object.entries(photos).filter(([_, file]) => file !== null)
     if (photoTypes.length === 0) return
-
     setUploadingPhotos(true)
-
     for (const [type, file] of photoTypes) {
       if (!file) continue
       const ext = file.name.split('.').pop() || 'jpg'
       const filePath = `day-${dayNum}/${type}.${ext}`
-
-      // Upload to storage
-      const { error: uploadError } = await supabase.storage
-        .from('photos')
-        .upload(filePath, file, { upsert: true })
-
-      if (uploadError) {
-        console.error(`Failed to upload ${type}:`, uploadError)
-        continue
-      }
-
-      // Get public URL
+      const { error: uploadError } = await supabase.storage.from('photos').upload(filePath, file, { upsert: true })
+      if (uploadError) { console.error(`Upload failed:`, uploadError); continue }
       const { data: urlData } = supabase.storage.from('photos').getPublicUrl(filePath)
       const photo_url = urlData.publicUrl
-
-      // Check if a photo of this type already exists for this day
-      const { data: existing } = await supabase
-        .from('photos')
-        .select('id')
-        .eq('day', dayNum)
-        .eq('type', type)
-        .single()
-
-      if (existing) {
-        // Update existing
-        await supabase.from('photos').update({ photo_url, caption: type }).eq('id', existing.id)
-      } else {
-        // Insert new
-        await supabase.from('photos').insert({ day: dayNum, type, photo_url, caption: type })
-      }
+      const { data: existing } = await supabase.from('photos').select('id').eq('day', dayNum).eq('type', type).single()
+      if (existing) { await supabase.from('photos').update({ photo_url, caption: type }).eq('id', existing.id) }
+      else { await supabase.from('photos').insert({ day: dayNum, type, photo_url, caption: type }) }
     }
-
     setUploadingPhotos(false)
   }
 
   const Bool = ({ label, k }: { label: string, k: string }) => (
-    <div className="flex flex-col gap-1">
-      <span className="text-sm text-gray-600 font-medium">{label}</span>
-      <div className="flex gap-2">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <span style={{ fontSize: '0.8125rem', fontWeight: 500, color: '#6e6e73' }}>{label}</span>
+      <div style={{ display: 'flex', gap: 8 }}>
         {[true, false].map(v => (
           <button key={String(v)} onClick={() => f(k, v)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium border transition-all ${(form as any)[k] === v ? (v ? 'bg-green-600 text-white border-green-600' : 'bg-red-500 text-white border-red-500') : 'bg-white text-gray-600 border-gray-300'}`}>
+            style={{
+              padding: '8px 20px',
+              borderRadius: 10,
+              fontSize: '0.8125rem',
+              fontWeight: 600,
+              border: 'none',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              fontFamily: 'inherit',
+              ...((form as any)[k] === v
+                ? (v ? { background: '#2d6a4f', color: 'white' } : { background: '#e63946', color: 'white' })
+                : { background: '#f0f0f0', color: '#6e6e73' })
+            }}>
             {v ? '✅ Yes' : '❌ No'}
           </button>
         ))}
@@ -210,7 +170,6 @@ export default function CheckIn() {
     setSaving(true)
     const dayNum = +form.day
     const { color, score } = getColor({ ...form, steps: +form.steps, sleep_hours: +form.sleep_hours, water_liters: +form.water_liters })
-
     await supabase.from('daily_logs').upsert({ day: dayNum, date: form.date, weight: +form.weight, color, score, notes: form.notes }, { onConflict: 'day' })
     await supabase.from('habits').upsert({
       day: dayNum, omad: form.omad, meal_description: form.meal_description,
@@ -222,185 +181,174 @@ export default function CheckIn() {
       yoga_sutras: form.yoga_sutras, zero_inbox: form.zero_inbox,
       workout: form.workout, workout_type: form.workout_type || null
     }, { onConflict: 'day' })
-
-    // Upload any selected photos
     await uploadPhotos(dayNum)
-
     setSaving(false)
     setSaved(true)
     setLoadedDay(dayNum)
-
-    // Reload photos to show updated
     await loadPhotosForDay(dayNum)
     setPhotos({ scale: null, food: null, selfie: null })
     setPhotoPreviews({ scale: '', food: '', selfie: '' })
-
     setTimeout(() => setSaved(false), 3000)
   }
 
+  const Section = ({ title, children }: { title: string, children: React.ReactNode }) => (
+    <div className="card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <p style={{ fontSize: '0.6875rem', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#86868b' }}>{title}</p>
+      {children}
+    </div>
+  )
+
+  const Input = ({ label, ...props }: any) => (
+    <div>
+      <label style={{ fontSize: '0.8125rem', fontWeight: 500, color: '#6e6e73', display: 'block', marginBottom: 4 }}>{label}</label>
+      <input {...props} style={{ width: '100%', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 10, padding: '10px 14px', fontSize: '0.875rem', fontFamily: 'inherit', background: 'white', ...props.style }} />
+    </div>
+  )
+
   return (
-    <div className="max-w-lg mx-auto space-y-4">
-      <div className="bg-green-900 text-white rounded-2xl p-4">
-        <h1 className="text-xl font-bold">📝 Daily Check-in</h1>
-        <p className="text-green-300 text-sm">Log your habits for any day</p>
+    <div style={{ maxWidth: 560, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+      {/* Header */}
+      <div style={{ marginBottom: 4 }}>
+        <p className="section-title" style={{ marginBottom: 6 }}>DAILY LOG</p>
+        <h1 style={{ fontSize: '2rem', fontWeight: 700, letterSpacing: '-0.03em', color: '#1d1d1f' }}>Check-in</h1>
       </div>
 
       {/* Day Selector */}
-      <div className="bg-white rounded-xl shadow p-4 space-y-3">
-        <div className="flex items-center gap-2 mb-2">
+      <div className="card" style={{ padding: '20px 24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={() => { const d = Math.max(1, (+form.day || 1) - 1); handleDayChange(String(d)) }}
-            className="px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 font-bold text-gray-700">←</button>
-          <div className="flex-1">
-            <label className="text-sm text-gray-600">Day #</label>
+            style={{ width: 40, height: 40, borderRadius: 10, border: 'none', background: '#f0f0f0', fontSize: '1rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', color: '#1d1d1f' }}>←</button>
+          <div style={{ flex: 1, textAlign: 'center' }}>
             <input type="number" value={form.day} onChange={e => handleDayChange(e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 mt-1 text-center text-lg font-bold" placeholder="e.g. 1" min={1} max={100} />
+              style={{ width: 80, textAlign: 'center', fontSize: '1.5rem', fontWeight: 700, border: 'none', background: 'transparent', fontFamily: 'inherit', color: '#1d1d1f', outline: 'none' }} min={1} max={100} />
+            <p style={{ fontSize: '0.75rem', color: '#86868b', marginTop: 2 }}>
+              {loading ? 'Loading...' : loadedDay ? `✏️ Editing Day ${loadedDay}` : form.day ? '🆕 New entry' : 'Enter day'}
+            </p>
           </div>
           <button onClick={() => { const d = Math.min(100, (+form.day || 0) + 1); handleDayChange(String(d)) }}
-            className="px-3 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 font-bold text-gray-700">→</button>
+            style={{ width: 40, height: 40, borderRadius: 10, border: 'none', background: '#f0f0f0', fontSize: '1rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', color: '#1d1d1f' }}>→</button>
         </div>
 
-        {loading && <p className="text-sm text-gray-400 text-center">Loading day data...</p>}
-        {loadedDay && !loading && (
-          <p className="text-xs text-green-600 text-center font-medium">✏️ Editing existing Day {loadedDay} data</p>
-        )}
-        {!loadedDay && !loading && form.day && (
-          <p className="text-xs text-blue-600 text-center font-medium">🆕 New entry for Day {form.day}</p>
-        )}
-
         {existingDays.length > 0 && (
-          <div>
-            <p className="text-xs text-gray-500 mb-1">Quick jump to logged days:</p>
-            <div className="flex flex-wrap gap-1">
+          <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(0,0,0,0.04)' }}>
+            <p style={{ fontSize: '0.6875rem', color: '#86868b', marginBottom: 6 }}>LOGGED DAYS</p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
               {existingDays.map(d => (
                 <button key={d} onClick={() => handleDayChange(String(d))}
-                  className={`px-2 py-1 rounded text-xs font-medium transition-all ${+form.day === d ? 'bg-green-700 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-                  {d}
-                </button>
+                  style={{
+                    padding: '4px 10px', borderRadius: 6, fontSize: '0.75rem', fontWeight: 600,
+                    border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                    background: +form.day === d ? '#2d6a4f' : '#f0f0f0',
+                    color: +form.day === d ? 'white' : '#6e6e73',
+                  }}>{d}</button>
               ))}
             </div>
           </div>
         )}
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="text-sm text-gray-600">Date</label>
-            <input type="date" value={form.date} onChange={e => f('date', e.target.value)} className="w-full border rounded-lg px-3 py-2 mt-1" />
-          </div>
-          <div>
-            <label className="text-sm text-gray-600">Morning Weight (kg)</label>
-            <input type="number" step="0.01" value={form.weight} onChange={e => f('weight', e.target.value)} className="w-full border rounded-lg px-3 py-2 mt-1" placeholder="e.g. 76.50" />
-          </div>
-        </div>
       </div>
 
-      {/* Photo Upload Section */}
-      <div className="bg-white rounded-xl shadow p-4 space-y-4">
-        <h2 className="font-bold text-purple-700">📸 Daily Photos</h2>
-        {PHOTO_TYPES.map(({ key, label, icon }) => (
-          <div key={key} className="space-y-2">
-            <label className="text-sm text-gray-600 font-medium">{label}</label>
-
-            {/* Show existing photo if present */}
-            {existingPhotos[key] && !photoPreviews[key] && (
-              <div className="relative">
-                <img src={existingPhotos[key]} alt={label}
-                  className="w-full h-40 object-cover rounded-lg border" />
-                <span className="absolute top-2 left-2 bg-green-600 text-white text-xs px-2 py-1 rounded-full">✅ Uploaded</span>
-              </div>
-            )}
-
-            {/* Show new photo preview */}
-            {photoPreviews[key] && (
-              <div className="relative">
-                <img src={photoPreviews[key]} alt={`New ${label}`}
-                  className="w-full h-40 object-cover rounded-lg border border-blue-300" />
-                <span className="absolute top-2 left-2 bg-blue-600 text-white text-xs px-2 py-1 rounded-full">🆕 New</span>
-                <button onClick={() => handlePhotoSelect(key, null)}
-                  className="absolute top-2 right-2 bg-red-500 text-white text-xs px-2 py-1 rounded-full">✕ Remove</button>
-              </div>
-            )}
-
-            <label className="block">
-              <span className="inline-block px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium text-gray-700 cursor-pointer transition-all">
-                {icon} {existingPhotos[key] ? 'Replace photo' : 'Choose photo'}
-              </span>
-              <input type="file" accept="image/*" capture="environment" className="hidden"
-                onChange={e => handlePhotoSelect(key, e.target.files?.[0] || null)} />
-            </label>
-          </div>
-        ))}
-      </div>
-
-      <div className="bg-white rounded-xl shadow p-4 space-y-4">
-        <h2 className="font-bold text-red-700">🔴 Non-Negotiables</h2>
-        <Bool label="1. OMAD" k="omad" />
-        <div>
-          <label className="text-sm text-gray-600">What did you eat?</label>
-          <textarea value={form.meal_description} onChange={e => f('meal_description', e.target.value)} className="w-full border rounded-lg px-3 py-2 mt-1" rows={2} placeholder="Describe your meal..." />
+      {/* Weight & Date */}
+      <Section title="BASICS">
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <Input label="Date" type="date" value={form.date} onChange={(e: any) => f('date', e.target.value)} />
+          <Input label="Morning Weight (kg)" type="number" step="0.01" value={form.weight} onChange={(e: any) => f('weight', e.target.value)} placeholder="76.50" />
         </div>
-        <div>
-          <label className="text-sm text-gray-600">2. Steps</label>
-          <input type="number" value={form.steps} onChange={e => f('steps', e.target.value)} className="w-full border rounded-lg px-3 py-2 mt-1" placeholder="e.g. 12500" />
+      </Section>
+
+      {/* Photos */}
+      <Section title="DAILY PHOTOS">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+          {PHOTO_TYPES.map(({ key, label, icon }) => (
+            <div key={key} style={{ textAlign: 'center' }}>
+              <div style={{
+                aspectRatio: '1',
+                borderRadius: 12,
+                overflow: 'hidden',
+                background: '#f0f0f0',
+                marginBottom: 8,
+                position: 'relative',
+                border: photoPreviews[key] ? '2px solid #2d6a4f' : existingPhotos[key] ? '2px solid rgba(45,106,79,0.3)' : '2px dashed rgba(0,0,0,0.1)',
+              }}>
+                {(photoPreviews[key] || existingPhotos[key]) ? (
+                  <img src={photoPreviews[key] || existingPhotos[key]} alt={label}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', fontSize: '1.5rem' }}>
+                    {icon}
+                  </div>
+                )}
+                {photoPreviews[key] && (
+                  <button onClick={() => handlePhotoSelect(key, null)}
+                    style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: '50%', background: 'rgba(0,0,0,0.5)', color: 'white', border: 'none', fontSize: '0.6875rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+                )}
+              </div>
+              <label style={{ cursor: 'pointer' }}>
+                <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#2d6a4f' }}>
+                  {existingPhotos[key] ? 'Replace' : 'Add'} {label}
+                </span>
+                <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
+                  onChange={e => handlePhotoSelect(key, e.target.files?.[0] || null)} />
+              </label>
+            </div>
+          ))}
         </div>
+      </Section>
+
+      {/* Non-Negotiables */}
+      <Section title="NON-NEGOTIABLES">
+        <Bool label="1. OMAD (One Meal a Day)" k="omad" />
+        <div>
+          <label style={{ fontSize: '0.8125rem', fontWeight: 500, color: '#6e6e73', display: 'block', marginBottom: 4 }}>What did you eat?</label>
+          <textarea value={form.meal_description} onChange={e => f('meal_description', e.target.value)}
+            rows={2} placeholder="Describe your meal..."
+            style={{ width: '100%', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 10, padding: '10px 14px', fontSize: '0.875rem', fontFamily: 'inherit', resize: 'vertical' }} />
+        </div>
+        <Input label="2. Steps" type="number" value={form.steps} onChange={(e: any) => f('steps', e.target.value)} placeholder="12500" />
         <Bool label="3. Meditate" k="meditate" />
         {form.meditate && (
-          <div className="grid grid-cols-3 gap-2">
-            <div>
-              <label className="text-xs text-gray-500">Start</label>
-              <input type="time" value={form.meditate_start} onChange={e => f('meditate_start', e.target.value)} className="w-full border rounded-lg px-2 py-1 mt-1" />
-            </div>
-            <div>
-              <label className="text-xs text-gray-500">End</label>
-              <input type="time" value={form.meditate_end} onChange={e => f('meditate_end', e.target.value)} className="w-full border rounded-lg px-2 py-1 mt-1" />
-            </div>
-            <div>
-              <label className="text-xs text-gray-500">Mins</label>
-              <input type="number" value={form.meditate_mins} onChange={e => f('meditate_mins', e.target.value)} className="w-full border rounded-lg px-2 py-1 mt-1" placeholder="23" />
-            </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+            <Input label="Start" type="time" value={form.meditate_start} onChange={(e: any) => f('meditate_start', e.target.value)} />
+            <Input label="End" type="time" value={form.meditate_end} onChange={(e: any) => f('meditate_end', e.target.value)} />
+            <Input label="Mins" type="number" value={form.meditate_mins} onChange={(e: any) => f('meditate_mins', e.target.value)} placeholder="20" />
           </div>
         )}
-        <div className="grid grid-cols-3 gap-2">
-          <div>
-            <label className="text-xs text-gray-500">Sleep Hours</label>
-            <input type="number" step="0.1" value={form.sleep_hours} onChange={e => f('sleep_hours', e.target.value)} className="w-full border rounded-lg px-2 py-1 mt-1" placeholder="7" />
-          </div>
-          <div>
-            <label className="text-xs text-gray-500">Sleep Time</label>
-            <input type="time" value={form.sleep_time} onChange={e => f('sleep_time', e.target.value)} className="w-full border rounded-lg px-2 py-1 mt-1" />
-          </div>
-          <div>
-            <label className="text-xs text-gray-500">Wake Time</label>
-            <input type="time" value={form.wake_time} onChange={e => f('wake_time', e.target.value)} className="w-full border rounded-lg px-2 py-1 mt-1" />
-          </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+          <Input label="Sleep Hours" type="number" step="0.1" value={form.sleep_hours} onChange={(e: any) => f('sleep_hours', e.target.value)} placeholder="7" />
+          <Input label="Sleep Time" type="time" value={form.sleep_time} onChange={(e: any) => f('sleep_time', e.target.value)} />
+          <Input label="Wake Time" type="time" value={form.wake_time} onChange={(e: any) => f('wake_time', e.target.value)} />
         </div>
         <Bool label="5. Zero Content" k="zero_content" />
-      </div>
+      </Section>
 
-      <div className="bg-white rounded-xl shadow p-4 space-y-4">
-        <h2 className="font-bold text-green-700">🟢 Best Effort</h2>
+      {/* Best Effort */}
+      <Section title="BEST EFFORT">
         <Bool label="6. Manifest" k="manifest" />
-        <div>
-          <label className="text-sm text-gray-600">7. Water (litres)</label>
-          <input type="number" step="0.1" value={form.water_liters} onChange={e => f('water_liters', e.target.value)} className="w-full border rounded-lg px-3 py-2 mt-1" placeholder="e.g. 3.2" />
-        </div>
+        <Input label="7. Water (litres)" type="number" step="0.1" value={form.water_liters} onChange={(e: any) => f('water_liters', e.target.value)} placeholder="3.2" />
         <Bool label="8. Yoga Sutras" k="yoga_sutras" />
         <Bool label="9. Zero Inbox" k="zero_inbox" />
         <Bool label="10. Workout" k="workout" />
         {form.workout && (
-          <div>
-            <label className="text-sm text-gray-600">Workout Type</label>
-            <input type="text" value={form.workout_type} onChange={e => f('workout_type', e.target.value)} className="w-full border rounded-lg px-3 py-2 mt-1" placeholder="e.g. Swimming, Running" />
-          </div>
+          <Input label="Workout Type" type="text" value={form.workout_type} onChange={(e: any) => f('workout_type', e.target.value)} placeholder="Swimming, Running..." />
         )}
         <div>
-          <label className="text-sm text-gray-600">Notes</label>
-          <textarea value={form.notes} onChange={e => f('notes', e.target.value)} className="w-full border rounded-lg px-3 py-2 mt-1" rows={2} placeholder="How are you feeling today?" />
+          <label style={{ fontSize: '0.8125rem', fontWeight: 500, color: '#6e6e73', display: 'block', marginBottom: 4 }}>Notes</label>
+          <textarea value={form.notes} onChange={e => f('notes', e.target.value)}
+            rows={2} placeholder="How are you feeling today?"
+            style={{ width: '100%', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 10, padding: '10px 14px', fontSize: '0.875rem', fontFamily: 'inherit', resize: 'vertical' }} />
         </div>
-      </div>
+      </Section>
 
+      {/* Save Button */}
       <button onClick={save} disabled={saving || uploadingPhotos}
-        className="w-full py-4 rounded-2xl text-white font-bold text-lg transition-all"
-        style={{ background: (saving || uploadingPhotos) ? '#9ca3af' : saved ? '#16a34a' : 'linear-gradient(135deg, #1a4a2e, #16a34a)' }}>
+        className="btn-primary"
+        style={{
+          width: '100%',
+          padding: '16px',
+          fontSize: '1rem',
+          marginBottom: 40,
+          opacity: (saving || uploadingPhotos) ? 0.5 : 1,
+        }}>
         {uploadingPhotos ? '📸 Uploading photos...' : saving ? 'Saving...' : saved ? '✅ Saved!' : loadedDay ? `Update Day ${form.day}` : `Save Day ${form.day}`}
       </button>
     </div>
