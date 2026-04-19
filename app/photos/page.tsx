@@ -27,6 +27,10 @@ export default function Photos() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
+      <style>{`
+        .photo-img { transition: transform 0.3s ease; }
+        .photo-img:hover { transform: scale(1.05); }
+      `}</style>
 
       {/* Header */}
       <div>
@@ -54,23 +58,15 @@ export default function Photos() {
               {(byDay[Number(day)] as any[]).map(p => (
                 <div key={p.id} style={{ position: 'relative', aspectRatio: '1', overflow: 'hidden' }}>
                   <img src={p.photo_url} alt={p.caption || `Day ${day}`}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.3s ease' }}
-                    onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'}
-                    onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                    className="photo-img"
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   />
                   <div style={{
-                    position: 'absolute',
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
+                    position: 'absolute', bottom: 0, left: 0, right: 0,
                     padding: '20px 10px 8px 10px',
                     background: 'linear-gradient(transparent, rgba(0,0,0,0.5))',
                   }}>
-                    <span style={{
-                      fontSize: '0.6875rem',
-                      fontWeight: 600,
-                      color: 'white',
-                    }}>
+                    <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'white' }}>
                       {TYPE_LABELS[p.type] || p.type}
                     </span>
                   </div>
