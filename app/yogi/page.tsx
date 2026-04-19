@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase'
 
 export default function YogiChat() {
   const [messages, setMessages] = useState<any[]>([
-    { role: 'assistant', content: '🙏 Namaste Monish! I am Yogi — your life, fitness and yoga coach. Rooted in Abhyasa and Vairagya. How can I help you today?' }
+    { role: 'assistant', content: '🙏 Namaste Monish. I am Yogi — your coach.\n\nTell me about your day — habits, steps, sleep, anything — and I\'ll track it automatically.' }
   ])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -26,48 +26,152 @@ export default function YogiChat() {
 
     const summary = logs.map(l => `Day ${l.day}: Weight ${l.weight}kg, Color: ${l.color}, Score: ${l.score}/10`).join('\n')
 
-    const res = await fetch('/api/yogi', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: [...messages, userMsg], summary })
-    })
-    const data = await res.json()
-    setMessages(p => [...p, { role: 'assistant', content: data.reply }])
+    try {
+      const res = await fetch('/api/yogi', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: [...messages, userMsg], summary })
+      })
+      const data = await res.json()
+      setMessages(p => [...p, { role: 'assistant', content: data.reply }])
+
+      if (data.saved?.success) {
+        setMessages(p => [...p, {
+          role: 'system',
+          content: `Saved Day ${data.saved.day} → ${data.saved.color} (${data.saved.score}/10)`
+        }])
+        const { data: newLogs } = await supabase.from('daily_logs').select('*, habits(*)').order('day')
+        if (newLogs) setLogs(newLogs)
+      }
+    } catch (err: any) {
+      setMessages(p => [...p, { role: 'assistant', content: `Error: ${err.message}` }])
+    }
+
     setLoading(false)
   }
 
   return (
-    <div className="max-w-2xl mx-auto flex flex-col h-[80vh]">
-      <div className="bg-green-900 text-white rounded-2xl p-4 mb-4">
-        <h1 className="text-xl font-bold">💬 Yogi — Your AI Coach</h1>
-        <p className="text-green-300 text-sm">Powered by Claude · Rooted in Patanjali</p>
+    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)', maxWidth: 680, margin: '0 auto' }}>
+
+      {/* Header */}
+      <div style={{ marginBottom: 20 }}>
+        <p className="section-title" style={{ marginBottom: 6 }}>AI COACH</p>
+        <h1 style={{ fontSize: '2rem', fontWeight: 700, letterSpacing: '-0.03em', color: '#1d1d1f' }}>Yogi</h1>
+        <p style={{ fontSize: '0.8125rem', color: '#86868b', marginTop: 4 }}>Powered by Gemini · Auto-saves your check-ins</p>
       </div>
 
-      <div className="flex-1 overflow-y-auto space-y-3 mb-4">
-        {messages.map((m, i) => (
-          <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-xs md:max-w-md px-4 py-3 rounded-2xl text-sm ${m.role === 'user' ? 'bg-green-700 text-white' : 'bg-white text-gray-800 shadow'}`}>
-              {m.content}
+      {/* Chat area */}
+      <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 20px 10px 20px' }}>
+          {messages.map((m, i) => (
+            <div key={i} style={{
+              display: 'flex',
+              justifyContent: m.role === 'user' ? 'flex-end' : m.role === 'system' ? 'center' : 'flex-start',
+              marginBottom: 12,
+            }}>
+              {m.role === 'system' ? (
+                <div style={{
+                  background: 'rgba(45,106,79,0.08)',
+                  border: '1px solid rgba(45,106,79,0.15)',
+                  color: '#2d6a4f',
+                  padding: '6px 14px',
+                  borderRadius: 100,
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                }}>
+                  ✅ {m.content}
+                </div>
+              ) : (
+                <div style={{
+                  maxWidth: '75%',
+                  padding: '12px 16px',
+                  borderRadius: m.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+                  fontSize: '0.875rem',
+                  lineHeight: 1.5,
+                  whiteSpace: 'pre-wrap',
+                  ...(m.role === 'user' ? {
+                    background: '#2d6a4f',
+                    color: 'white',
+                  } : {
+                    background: '#f0f0f0',
+                    color: '#1d1d1f',
+                  })
+                }}>
+                  {m.content}
+                </div>
+              )}
             </div>
-          </div>
-        ))}
-        {loading && (
-          <div className="flex justify-start">
-            <div className="bg-white shadow px-4 py-3 rounded-2xl text-sm text-gray-500 italic">Yogi is thinking... 🧘</div>
-          </div>
-        )}
-        <div ref={bottom} />
-      </div>
+          ))}
+          {loading && (
+            <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: 12 }}>
+              <div style={{
+                background: '#f0f0f0',
+                padding: '12px 16px',
+                borderRadius: '18px 18px 18px 4px',
+                fontSize: '0.875rem',
+                color: '#86868b',
+              }}>
+                <span style={{ display: 'inline-flex', gap: 4 }}>
+                  <span style={{ animation: 'fadeIn 1s infinite' }}>●</span>
+                  <span style={{ animation: 'fadeIn 1s infinite 0.2s' }}>●</span>
+                  <span style={{ animation: 'fadeIn 1s infinite 0.4s' }}>●</span>
+                </span>
+              </div>
+            </div>
+          )}
+          <div ref={bottom} />
+        </div>
 
-      <div className="flex gap-2">
-        <input value={input} onChange={e => setInput(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && send()}
-          className="flex-1 border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
-          placeholder="Ask Yogi anything..." />
-        <button onClick={send} disabled={loading}
-          className="bg-green-800 text-white px-5 py-3 rounded-xl font-medium hover:bg-green-700 transition">
-          Send
-        </button>
+        {/* Input area */}
+        <div style={{
+          padding: '12px 16px',
+          borderTop: '1px solid rgba(0,0,0,0.06)',
+          display: 'flex',
+          gap: 10,
+          alignItems: 'center',
+        }}>
+          <input
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && send()}
+            placeholder="Tell Yogi about your day..."
+            style={{
+              flex: 1,
+              border: '1px solid rgba(0,0,0,0.08)',
+              borderRadius: 12,
+              padding: '12px 16px',
+              fontSize: '0.875rem',
+              background: '#fafafa',
+              outline: 'none',
+            }}
+            onFocus={e => {
+              e.currentTarget.style.borderColor = '#2d6a4f'
+              e.currentTarget.style.boxShadow = '0 0 0 3px rgba(45,106,79,0.08)'
+            }}
+            onBlur={e => {
+              e.currentTarget.style.borderColor = 'rgba(0,0,0,0.08)'
+              e.currentTarget.style.boxShadow = 'none'
+            }}
+          />
+          <button
+            onClick={send}
+            disabled={loading}
+            style={{
+              background: loading ? '#c7c7cc' : '#2d6a4f',
+              color: 'white',
+              border: 'none',
+              borderRadius: 12,
+              padding: '12px 20px',
+              fontSize: '0.875rem',
+              fontWeight: 600,
+              cursor: loading ? 'not-allowed' : 'pointer',
+              transition: 'all 0.2s ease',
+              fontFamily: 'inherit',
+            }}
+          >
+            Send
+          </button>
+        </div>
       </div>
     </div>
   )
