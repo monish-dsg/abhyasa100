@@ -13,16 +13,70 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="bg-gray-50 min-h-screen">
-        <nav className="bg-green-900 text-white px-6 py-4 flex gap-6 text-sm font-medium">
-          <a href="/" className="hover:text-green-300">Dashboard</a>
-          <a href="/checkin" className="hover:text-green-300">Check-in</a>
-          <a href="/habits" className="hover:text-green-300">Habits</a>
-          <a href="/yogi" className="hover:text-green-300">Yogi</a>
-          <a href="/photos" className="hover:text-green-300">Photos</a>
-          <a href="/sutras" className="hover:text-green-300">Yoga Sutras</a>
+      <body style={{ background: '#f5f5f7', minHeight: '100vh' }}>
+        <nav style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 50,
+          background: 'rgba(245,245,247,0.72)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          borderBottom: '1px solid rgba(0,0,0,0.06)',
+        }}>
+          <div style={{
+            maxWidth: '980px',
+            margin: '0 auto',
+            padding: '0 24px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            height: '52px',
+          }}>
+            <a href="/" style={{
+              fontSize: '1.125rem',
+              fontWeight: 700,
+              color: '#1b4332',
+              textDecoration: 'none',
+              letterSpacing: '-0.03em',
+            }}>
+              🧘 Abhyasa
+            </a>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {[
+                { href: '/', label: 'Dashboard' },
+                { href: '/checkin', label: 'Check-in' },
+                { href: '/habits', label: 'Habits' },
+                { href: '/yogi', label: 'Yogi' },
+                { href: '/photos', label: 'Photos' },
+                { href: '/sutras', label: 'Sutras' },
+              ].map(link => (
+                <a key={link.href} href={link.href} style={{
+                  fontSize: '0.8125rem',
+                  fontWeight: 500,
+                  color: '#6e6e73',
+                  textDecoration: 'none',
+                  padding: '6px 12px',
+                  borderRadius: '8px',
+                  transition: 'all 0.2s ease',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(0,0,0,0.04)'
+                  e.currentTarget.style.color = '#1d1d1f'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent'
+                  e.currentTarget.style.color = '#6e6e73'
+                }}
+                >
+                  {link.label}
+                </a>
+              ))}
+            </div>
+          </div>
         </nav>
-        <main className="max-w-5xl mx-auto p-6">{children}</main>
+        <main style={{ maxWidth: '980px', margin: '0 auto', padding: '32px 24px' }}>
+          {children}
+        </main>
       </body>
     </html>
   )
