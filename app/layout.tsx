@@ -14,63 +14,57 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body style={{ background: '#f5f5f7', minHeight: '100vh' }}>
-        <nav style={{
-          position: 'sticky',
-          top: 0,
-          zIndex: 50,
-          background: 'rgba(245,245,247,0.72)',
-          backdropFilter: 'blur(20px)',
-          WebkitBackdropFilter: 'blur(20px)',
-          borderBottom: '1px solid rgba(0,0,0,0.06)',
-        }}>
-          <div style={{
-            maxWidth: '980px',
-            margin: '0 auto',
-            padding: '0 24px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            height: '52px',
-          }}>
-            <a href="/" style={{
-              fontSize: '1.125rem',
-              fontWeight: 700,
-              color: '#1b4332',
-              textDecoration: 'none',
-              letterSpacing: '-0.03em',
-            }}>
-              🧘 Abhyasa
-            </a>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              {[
-                { href: '/', label: 'Dashboard' },
-                { href: '/checkin', label: 'Check-in' },
-                { href: '/habits', label: 'Habits' },
-                { href: '/yogi', label: 'Yogi' },
-                { href: '/photos', label: 'Photos' },
-                { href: '/sutras', label: 'Sutras' },
-              ].map(link => (
-                <a key={link.href} href={link.href} style={{
-                  fontSize: '0.8125rem',
-                  fontWeight: 500,
-                  color: '#6e6e73',
-                  textDecoration: 'none',
-                  padding: '6px 12px',
-                  borderRadius: '8px',
-                  transition: 'all 0.2s ease',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(0,0,0,0.04)'
-                  e.currentTarget.style.color = '#1d1d1f'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'transparent'
-                  e.currentTarget.style.color = '#6e6e73'
-                }}
-                >
-                  {link.label}
-                </a>
-              ))}
+        <style>{`
+          .nav-wrap {
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            background: rgba(245,245,247,0.72);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(0,0,0,0.06);
+          }
+          .nav-inner {
+            max-width: 980px;
+            margin: 0 auto;
+            padding: 0 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 52px;
+          }
+          .nav-logo {
+            font-size: 1.125rem;
+            font-weight: 700;
+            color: #1b4332;
+            text-decoration: none;
+            letter-spacing: -0.03em;
+          }
+          .nav-links { display: flex; gap: 4px; }
+          .nav-link {
+            font-size: 0.8125rem;
+            font-weight: 500;
+            color: #6e6e73;
+            text-decoration: none;
+            padding: 6px 12px;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+          }
+          .nav-link:hover {
+            background: rgba(0,0,0,0.04);
+            color: #1d1d1f;
+          }
+        `}</style>
+        <nav className="nav-wrap">
+          <div className="nav-inner">
+            <a href="/" className="nav-logo">🧘 Abhyasa</a>
+            <div className="nav-links">
+              <a href="/" className="nav-link">Dashboard</a>
+              <a href="/checkin" className="nav-link">Check-in</a>
+              <a href="/habits" className="nav-link">Habits</a>
+              <a href="/yogi" className="nav-link">Yogi</a>
+              <a href="/photos" className="nav-link">Photos</a>
+              <a href="/sutras" className="nav-link">Sutras</a>
             </div>
           </div>
         </nav>
