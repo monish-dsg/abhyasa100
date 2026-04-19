@@ -2,6 +2,12 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 
+const TYPE_LABELS: Record<string, string> = {
+  scale: '⚖️ Scale',
+  food: '🍽️ Meal',
+  selfie: '🤳 Selfie',
+}
+
 export default function Photos() {
   const [photos, setPhotos] = useState<any[]>([])
 
@@ -17,33 +23,57 @@ export default function Photos() {
     return acc
   }, {} as Record<number, any[]>)
 
+  const days = Object.keys(byDay).sort((a, b) => Number(b) - Number(a))
+
   return (
-    <div className="space-y-6">
-      <div className="bg-green-900 text-white rounded-2xl p-5">
-        <h1 className="text-2xl font-bold">📸 Photo Journal</h1>
-        <p className="text-green-300 text-sm">Your 100 day visual journey</p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
+
+      {/* Header */}
+      <div>
+        <p className="section-title" style={{ marginBottom: 6 }}>VISUAL JOURNEY</p>
+        <h1 style={{ fontSize: '2rem', fontWeight: 700, letterSpacing: '-0.03em', color: '#1d1d1f' }}>Photo Journal</h1>
+        <p style={{ fontSize: '0.875rem', color: '#86868b', marginTop: 4 }}>
+          {photos.length} photos across {days.length} days
+        </p>
       </div>
 
-      {Object.keys(byDay).length === 0 ? (
-        <div className="bg-white rounded-xl shadow p-8 text-center">
-          <p className="text-4xl mb-3">📷</p>
-          <p className="text-gray-500">No photos yet. Upload your daily photos through the check-in page.</p>
+      {days.length === 0 ? (
+        <div className="card" style={{ padding: '60px 24px', textAlign: 'center' }}>
+          <p style={{ fontSize: '3rem', marginBottom: 12 }}>📷</p>
+          <p style={{ fontSize: '0.9375rem', fontWeight: 500, color: '#6e6e73' }}>No photos yet</p>
+          <p style={{ fontSize: '0.8125rem', color: '#86868b', marginTop: 4 }}>Upload your daily photos through the Check-in page</p>
         </div>
       ) : (
-        Object.entries(byDay).map(([day, dayPhotos]) => (
-          <div key={day} className="bg-white rounded-xl shadow p-4">
-            <h2 className="font-bold text-green-800 mb-3">Day {day}</h2>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {(dayPhotos as any[]).map(p => (
-                <div key={p.id} className="relative">
+        days.map(day => (
+          <div key={day} className="card" style={{ overflow: 'hidden' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(0,0,0,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <p style={{ fontSize: '0.9375rem', fontWeight: 600, color: '#1d1d1f' }}>Day {day}</p>
+              <p style={{ fontSize: '0.75rem', color: '#86868b' }}>{(byDay[Number(day)] as any[]).length} photos</p>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2 }}>
+              {(byDay[Number(day)] as any[]).map(p => (
+                <div key={p.id} style={{ position: 'relative', aspectRatio: '1', overflow: 'hidden' }}>
                   <img src={p.photo_url} alt={p.caption || `Day ${day}`}
-                    className="w-full h-48 object-cover rounded-lg" />
-                  {p.caption && (
-                    <p className="text-xs text-gray-500 mt-1">{p.caption}</p>
-                  )}
-                  <span className="absolute top-2 right-2 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded-full">
-                    {p.type}
-                  </span>
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.3s ease' }}
+                    onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'}
+                    onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                  />
+                  <div style={{
+                    position: 'absolute',
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    padding: '20px 10px 8px 10px',
+                    background: 'linear-gradient(transparent, rgba(0,0,0,0.5))',
+                  }}>
+                    <span style={{
+                      fontSize: '0.6875rem',
+                      fontWeight: 600,
+                      color: 'white',
+                    }}>
+                      {TYPE_LABELS[p.type] || p.type}
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>
