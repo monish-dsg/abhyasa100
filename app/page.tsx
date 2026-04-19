@@ -2,11 +2,11 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
-const COLOR_STYLES: Record<string, string> = {
-  'Dark Green': 'bg-green-900 text-white',
-  'Green': 'bg-green-500 text-white',
-  'Orange': 'bg-orange-500 text-white',
-  'Red': 'bg-red-500 text-white',
+const COLOR_MAP: Record<string, { bg: string; text: string; label: string }> = {
+  'Dark Green': { bg: '#1b4332', text: '#ffffff', label: '🌑 Perfect' },
+  'Green': { bg: '#40916c', text: '#ffffff', label: '🟢 Solid' },
+  'Orange': { bg: '#e76f51', text: '#ffffff', label: '🟠 Slipped' },
+  'Red': { bg: '#e63946', text: '#ffffff', label: '🔴 Missed' },
 }
 
 export default function Dashboard() {
@@ -26,72 +26,120 @@ export default function Dashboard() {
   const green = logs.filter(l => l.color === 'Green').length
   const orange = logs.filter(l => l.color === 'Orange').length
   const red = logs.filter(l => l.color === 'Red').length
-  const progress = (startWeight && latest) ? ((startWeight - latest.weight) / (startWeight - targetWeight)) * 100 : 0
+  const progress = (startWeight && latest) ? Math.min(100, Math.max(0, ((startWeight - latest.weight) / (startWeight - targetWeight)) * 100)) : 0
+  const avgScore = logs.length ? (logs.reduce((a, l) => a + l.score, 0) / logs.length).toFixed(1) : '—'
 
   return (
-    <div className="space-y-6">
-      <div className="bg-gradient-to-r from-green-900 to-green-600 text-white rounded-2xl p-6">
-        <h1 className="text-3xl font-bold">🧘 Abhyasa100</h1>
-        <p className="text-green-200 mt-1">Monish Shah · Founder & CEO, DreamSetGo · Day {logs.length} of 100</p>
-        <p className="text-green-300 text-sm mt-1 italic">"Abhyasa and Vairagya — Practice and Desirelessness"</p>
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl p-4 shadow text-center">
-          <p className="text-gray-500 text-sm">Start Weight</p>
-          <p className="text-2xl font-bold text-green-800">{startWeight ? `${startWeight} kg` : '—'}</p>
-        </div>
-        <div className="bg-white rounded-xl p-4 shadow text-center">
-          <p className="text-gray-500 text-sm">Current Weight</p>
-          <p className="text-2xl font-bold text-green-800">{latest?.weight ? `${latest.weight} kg` : '—'}</p>
-        </div>
-        <div className="bg-white rounded-xl p-4 shadow text-center">
-          <p className="text-gray-500 text-sm">Target Weight</p>
-          <p className="text-2xl font-bold text-green-800">{targetWeight} kg</p>
-        </div>
-        <div className="bg-white rounded-xl p-4 shadow text-center">
-          <p className="text-gray-500 text-sm">Days Done</p>
-          <p className="text-2xl font-bold text-green-800">{logs.length}/100</p>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-xl p-4 shadow">
-        <h2 className="font-bold text-gray-700 mb-2">⚖️ Weight Progress</h2>
-        <div className="bg-gray-200 rounded-full h-4">
-          <div className="bg-green-600 h-4 rounded-full transition-all" style={{ width: `${Math.min(100, Math.max(0, progress))}%` }} />
-        </div>
-        <p className="text-sm text-gray-500 mt-1 text-center">
-          {(startWeight && latest) ? `${(startWeight - latest.weight).toFixed(2)} kg lost · ${(latest.weight - targetWeight).toFixed(2)} kg to go` : 'Weigh in on Day 1 to start tracking'}
+      {/* Hero */}
+      <div style={{
+        background: 'linear-gradient(135deg, #1b4332 0%, #2d6a4f 50%, #40916c 100%)',
+        borderRadius: '20px',
+        padding: '40px 36px',
+        color: 'white',
+        position: 'relative',
+        overflow: 'hidden',
+      }}>
+        <div style={{ position: 'absolute', top: -60, right: -60, width: 200, height: 200, borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }} />
+        <div style={{ position: 'absolute', bottom: -40, right: 80, width: 120, height: 120, borderRadius: '50%', background: 'rgba(255,255,255,0.04)' }} />
+        <p style={{ fontSize: '0.6875rem', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', opacity: 0.7, marginBottom: 8 }}>
+          100-DAY DISCIPLINE CHALLENGE
+        </p>
+        <h1 style={{ fontSize: '2rem', fontWeight: 700, letterSpacing: '-0.03em', margin: 0 }}>
+          Abhyasa100
+        </h1>
+        <p style={{ fontSize: '0.9375rem', opacity: 0.7, marginTop: 6, fontWeight: 400 }}>
+          Monish Shah · Day {logs.length} of 100
+        </p>
+        <p style={{ fontSize: '0.8125rem', opacity: 0.5, marginTop: 4, fontStyle: 'italic' }}>
+          Practice and Desirelessness
         </p>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-green-900 text-white rounded-xl p-4 text-center">
-          <p className="text-3xl font-bold">{darkGreen}</p>
-          <p className="text-sm">🌑 Dark Green</p>
+      {/* Stats Row */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
+        {[
+          { label: 'Start', value: startWeight ? `${startWeight}` : '—', unit: 'kg' },
+          { label: 'Current', value: latest?.weight ? `${latest.weight}` : '—', unit: 'kg' },
+          { label: 'Target', value: `${targetWeight}`, unit: 'kg' },
+          { label: 'Avg Score', value: avgScore, unit: '/10' },
+        ].map(s => (
+          <div key={s.label} className="card" style={{ padding: '20px 16px', textAlign: 'center' }}>
+            <p style={{ fontSize: '0.6875rem', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#86868b', marginBottom: 8 }}>{s.label}</p>
+            <p style={{ fontSize: '1.75rem', fontWeight: 700, letterSpacing: '-0.03em', color: '#1d1d1f', lineHeight: 1 }}>
+              {s.value}<span style={{ fontSize: '0.875rem', fontWeight: 500, color: '#86868b', marginLeft: 2 }}>{s.unit}</span>
+            </p>
+          </div>
+        ))}
+      </div>
+
+      {/* Weight Progress */}
+      <div className="card" style={{ padding: '24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <p style={{ fontSize: '0.9375rem', fontWeight: 600, color: '#1d1d1f' }}>Weight Progress</p>
+          <p style={{ fontSize: '0.8125rem', color: '#86868b' }}>
+            {(startWeight && latest) ? `${(startWeight - latest.weight).toFixed(1)} kg lost` : 'Awaiting Day 1'}
+          </p>
         </div>
-        <div className="bg-green-500 text-white rounded-xl p-4 text-center">
-          <p className="text-3xl font-bold">{green}</p>
-          <p className="text-sm">🟢 Green</p>
+        <div style={{ background: '#f0f0f0', borderRadius: 100, height: 8, overflow: 'hidden' }}>
+          <div style={{
+            width: `${progress}%`,
+            height: '100%',
+            borderRadius: 100,
+            background: 'linear-gradient(90deg, #2d6a4f, #40916c)',
+            transition: 'width 0.8s cubic-bezier(0.4, 0, 0.2, 1)',
+          }} />
         </div>
-        <div className="bg-orange-500 text-white rounded-xl p-4 text-center">
-          <p className="text-3xl font-bold">{orange}</p>
-          <p className="text-sm">🟠 Orange</p>
-        </div>
-        <div className="bg-red-500 text-white rounded-xl p-4 text-center">
-          <p className="text-3xl font-bold">{red}</p>
-          <p className="text-sm">🔴 Red</p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
+          <p style={{ fontSize: '0.75rem', color: '#86868b' }}>{startWeight || '—'} kg</p>
+          <p style={{ fontSize: '0.75rem', color: '#86868b' }}>{targetWeight} kg</p>
         </div>
       </div>
 
-      <div className="bg-white rounded-xl p-4 shadow">
-        <h2 className="font-bold text-gray-700 mb-3">📅 Calendar</h2>
-        <div className="grid grid-cols-10 gap-2">
+      {/* Color Summary */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
+        {[
+          { count: darkGreen, bg: '#1b4332', label: 'Perfect', sub: 'All 10 done' },
+          { count: green, bg: '#40916c', label: 'Solid', sub: '5/5 non-neg' },
+          { count: orange, bg: '#e76f51', label: 'Slipped', sub: '1 missed' },
+          { count: red, bg: '#e63946', label: 'Missed', sub: '2+ missed' },
+        ].map(c => (
+          <div key={c.label} style={{
+            background: c.bg,
+            borderRadius: 'var(--radius)',
+            padding: '20px 16px',
+            textAlign: 'center',
+            color: 'white',
+          }}>
+            <p style={{ fontSize: '2rem', fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 1 }}>{c.count}</p>
+            <p style={{ fontSize: '0.8125rem', fontWeight: 600, marginTop: 4 }}>{c.label}</p>
+            <p style={{ fontSize: '0.6875rem', opacity: 0.6, marginTop: 2 }}>{c.sub}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* 100-Day Calendar */}
+      <div className="card" style={{ padding: '24px' }}>
+        <p style={{ fontSize: '0.9375rem', fontWeight: 600, color: '#1d1d1f', marginBottom: 16 }}>100-Day Calendar</p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 1fr)', gap: '6px' }}>
           {Array.from({ length: 100 }, (_, i) => {
             const log = logs.find(l => l.day === i + 1)
-            const colorClass = log ? COLOR_STYLES[log.color] : 'bg-gray-100 text-gray-400'
+            const colorInfo = log ? COLOR_MAP[log.color] : null
             return (
-              <div key={i} className={`${colorClass} rounded-lg p-2 text-center text-xs font-bold`}>
+              <div key={i} style={{
+                background: colorInfo ? colorInfo.bg : '#f0f0f0',
+                color: colorInfo ? colorInfo.text : '#c7c7cc',
+                borderRadius: 8,
+                padding: '8px 0',
+                textAlign: 'center',
+                fontSize: '0.6875rem',
+                fontWeight: 600,
+                transition: 'transform 0.2s ease',
+                cursor: log ? 'pointer' : 'default',
+              }}
+              title={log ? `Day ${i+1}: ${log.color} (${log.score}/10)` : `Day ${i+1}`}
+              >
                 {i + 1}
               </div>
             )
@@ -99,20 +147,46 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl p-4 shadow divide-y">
-        <h2 className="font-bold text-gray-700 mb-3">📋 Daily Log</h2>
-        {[...logs].reverse().map(l => (
-          <div key={l.id} className="py-3 flex justify-between items-center">
-            <div>
-              <span className="font-bold text-green-800">Day {l.day}</span>
-              <span className="text-gray-400 text-xs ml-2">{l.date}</span>
-              <p className="text-xs text-gray-500">{l.weight} kg</p>
-            </div>
-            <span className={`${COLOR_STYLES[l.color]} px-3 py-1 rounded-full text-xs font-bold`}>
-              {l.score}/10
-            </span>
+      {/* Daily Log */}
+      <div className="card" style={{ overflow: 'hidden' }}>
+        <div style={{ padding: '20px 24px', borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
+          <p style={{ fontSize: '0.9375rem', fontWeight: 600, color: '#1d1d1f' }}>Daily Log</p>
+        </div>
+        {logs.length === 0 ? (
+          <div style={{ padding: '40px 24px', textAlign: 'center', color: '#86868b', fontSize: '0.875rem' }}>
+            No entries yet. Start your journey tomorrow.
           </div>
-        ))}
+        ) : (
+          [...logs].reverse().map((l, i) => (
+            <div key={l.id} style={{
+              padding: '16px 24px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              borderBottom: i < logs.length - 1 ? '1px solid rgba(0,0,0,0.04)' : 'none',
+              transition: 'background 0.2s ease',
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.02)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            >
+              <div>
+                <span style={{ fontSize: '0.9375rem', fontWeight: 600, color: '#1d1d1f' }}>Day {l.day}</span>
+                <span style={{ fontSize: '0.75rem', color: '#86868b', marginLeft: 10 }}>{l.date}</span>
+                {l.weight > 0 && <span style={{ fontSize: '0.75rem', color: '#86868b', marginLeft: 10 }}>{l.weight} kg</span>}
+              </div>
+              <div style={{
+                background: COLOR_MAP[l.color]?.bg || '#f0f0f0',
+                color: 'white',
+                padding: '4px 14px',
+                borderRadius: 100,
+                fontSize: '0.75rem',
+                fontWeight: 600,
+              }}>
+                {l.score}/10
+              </div>
+            </div>
+          ))
+        )}
       </div>
     </div>
   )
