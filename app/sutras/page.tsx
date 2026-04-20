@@ -4,33 +4,34 @@ import { supabase } from '../../lib/supabase'
 
 export default function Sutras() {
   const [sutras, setSutras] = useState<any[]>([])
-  const [selected, setSelected] = useState<any>(null)
-  useEffect(() => { supabase.from('yoga_sutras').select('*').order('volume').then(({ data }) => { if (data) setSutras(data) }) }, [])
+  const [sel, setSel] = useState<any>(null)
+  useEffect(()=>{supabase.from('yoga_sutras').select('*').order('volume').then(({data})=>{if(data)setSutras(data)})}, [])
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-      <div>
-        <p className="section-title" style={{ marginBottom: 6 }}>WISDOM</p>
-        <h1 style={{ fontSize: '2rem', fontWeight: 700, letterSpacing: '-0.03em' }}>Yoga Sutras</h1>
-        <p style={{ fontSize: '0.8125rem', color: 'rgba(255,255,255,0.35)', marginTop: 4 }}>Patanjali · Osho · 10 Volumes</p>
-      </div>
+    <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+      <h1 style={{ fontSize:34, fontWeight:700, letterSpacing:'-0.03em' }}>Yoga Sutras</h1>
+      <p style={{ fontSize:15, color:'#8E8E93', marginTop:-8 }}>Patanjali · Osho · 10 Volumes</p>
 
-      {sutras.length === 0 ? (
-        <div className="card" style={{ padding: '60px 24px', textAlign: 'center' }}>
-          <p style={{ fontSize: '3rem', marginBottom: 12 }}>📖</p>
-          <p style={{ fontSize: '0.875rem', color: 'rgba(255,255,255,0.4)' }}>No volumes yet</p>
+      {sutras.length===0 ? (
+        <div className="card" style={{ padding:'48px 24px', textAlign:'center' }}>
+          <p style={{ fontSize:40, marginBottom:8 }}>📖</p>
+          <p style={{ fontSize:15, color:'#8E8E93' }}>No volumes yet</p>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
           {sutras.map(s => (
-            <div key={s.id} onClick={() => setSelected(selected?.id === s.id ? null : s)} className="card"
-              style={{ padding: 24, cursor: 'pointer', borderColor: selected?.id === s.id ? 'rgba(0,209,160,0.4)' : undefined }}>
-              <p style={{ fontSize: '0.625rem', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#00D1A0', marginBottom: 6 }}>Volume {s.volume}</p>
-              <h2 style={{ fontSize: '0.9375rem', fontWeight: 600, lineHeight: 1.3 }}>{s.title}</h2>
-              {selected?.id === s.id && (
-                <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-                  <p style={{ fontSize: '0.625rem', fontWeight: 600, letterSpacing: '0.08em', color: 'rgba(255,255,255,0.25)', marginBottom: 8 }}>SUMMARY</p>
-                  <p style={{ fontSize: '0.8125rem', lineHeight: 1.7, color: 'rgba(255,255,255,0.6)' }}>{s.summary}</p>
+            <div key={s.id} onClick={()=>setSel(sel?.id===s.id?null:s)} className="card"
+              style={{ padding:16, cursor:'pointer', borderLeft: sel?.id===s.id ? '3px solid #FF2D55' : '3px solid transparent' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <div>
+                  <p style={{ fontSize:11, fontWeight:600, color:'#FF2D55', letterSpacing:'0.04em', marginBottom:4 }}>VOLUME {s.volume}</p>
+                  <p style={{ fontSize:17, fontWeight:600 }}>{s.title}</p>
+                </div>
+                <span style={{ fontSize:13, color:'#FF2D55', fontWeight:500 }}>{sel?.id===s.id ? 'Close' : 'Read'}</span>
+              </div>
+              {sel?.id===s.id && (
+                <div style={{ marginTop:14, paddingTop:14, borderTop:'0.5px solid rgba(60,60,67,0.12)' }}>
+                  <p style={{ fontSize:15, lineHeight:1.7, color:'#3C3C43' }}>{s.summary}</p>
                 </div>
               )}
             </div>
