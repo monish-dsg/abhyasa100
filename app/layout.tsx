@@ -9,18 +9,17 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+      </head>
       <body>
-        <nav style={{
-          position: 'sticky', top: 0, zIndex: 50,
-          background: 'rgba(11,11,11,0.85)',
-          backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
-          borderBottom: '1px solid rgba(255,255,255,0.06)',
-        }}>
-          <div style={{ maxWidth: 980, margin: '0 auto', padding: '0 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 52 }}>
-            <a href="/" className="nav-logo">⌚ Abhyasa</a>
-            <div style={{ display: 'flex', gap: 4 }}>
-              <a href="/" className="nav-link">Dashboard</a>
-              <a href="/checkin" className="nav-link">Check-in</a>
+        <nav className="nav-wrap">
+          <div className="nav-inner">
+            <a href="/" className="nav-logo">🧘 Abhyasa</a>
+            <div className="nav-links">
+              <a href="/" className="nav-link">Home</a>
+              <a href="/checkin" className="nav-link">Add</a>
               <a href="/habits" className="nav-link">Habits</a>
               <a href="/yogi" className="nav-link">Yogi</a>
               <a href="/photos" className="nav-link">Photos</a>
@@ -28,7 +27,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </div>
           </div>
         </nav>
-        <main style={{ maxWidth: 980, margin: '0 auto', padding: '32px 24px' }}>{children}</main>
+        <main style={{ maxWidth: 640, margin: '0 auto', padding: '16px 16px 40px' }}>{children}</main>
       </body>
     </html>
   )
