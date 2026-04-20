@@ -58,11 +58,85 @@ export default function CheckIn() {
   const [existingPhotos, setExistingPhotos] = useState<Record<string, string>>({ scale: '', food: '', selfie: '' })
   const [uploadingPhotos, setUploadingPhotos] = useState(false)
 
+  // Whoop state
+  const [whoopConnected, setWhoopConnected] = useState<boolean | null>(null)
+  const [whoopSyncing, setWhoopSyncing] = useState(false)
+  const [whoopSynced, setWhoopSynced] = useState(false)
+  const [whoopFields, setWhoopFields] = useState<string[]>([])
+
   useEffect(() => {
     supabase.from('daily_logs').select('day').order('day').then(({ data }) => {
       if (data) setExistingDays(data.map(d => d.day))
     })
+    // Check Whoop connection on load
+    checkWhoopConnection()
   }, [saved])
+
+  const checkWhoopConnection = async () => {
+    try {
+      const res = await fetch('/api/whoop/sync?date=2026-01-01')
+      const data = await res.json()
+      setWhoopConnected(data.connected !== false)
+    } catch {
+      setWhoopConnected(false)
+    }
+  }
+
+  const syncWhoop = async () => {
+    if (!form.date) return
+    setWhoopSyncing(true)
+    setWhoopSynced(false)
+    setWhoopFields([])
+
+    try {
+      const res = await fetch(`/api/whoop/sync?date=${form.date}`)
+      const data = await res.json()
+
+      if (!data.connected) {
+        setWhoopConnected(false)
+        setWhoopSyncing(false)
+        return
+      }
+
+      const filled: string[] = []
+
+      // Sleep data
+      if (data.sleep) {
+        if (data.sleep.sleep_hours) { setForm(p => ({ ...p, sleep_hours: String(data.sleep.sleep_hours) })); filled.push('Sleep hours') }
+        if (data.sleep.sleep_time) { setForm(p => ({ ...p, sleep_time: data.sleep.sleep_time })); filled.push('Sleep time') }
+        if (data.sleep.wake_time) { setForm(p => ({ ...p, wake_time: data.sleep.wake_time })); filled.push('Wake time') }
+      }
+
+      // Steps
+      if (data.steps !== null && data.steps !== undefined) {
+        setForm(p => ({ ...p, steps: String(data.steps) }))
+        filled.push('Steps')
+      }
+
+      // Meditation
+      if (data.meditation) {
+        setForm(p => ({ ...p, meditate: true }))
+        filled.push('Meditation')
+        if (data.meditation.meditate_mins) { setForm(p => ({ ...p, meditate_mins: String(data.meditation.meditate_mins) })); filled.push('Meditation mins') }
+        if (data.meditation.meditate_start) setForm(p => ({ ...p, meditate_start: data.meditation.meditate_start }))
+        if (data.meditation.meditate_end) setForm(p => ({ ...p, meditate_end: data.meditation.meditate_end }))
+      }
+
+      // Workout
+      if (data.workout) {
+        setForm(p => ({ ...p, workout: true }))
+        filled.push('Workout')
+        if (data.workout.workout_type) { setForm(p => ({ ...p, workout_type: data.workout.workout_type })); filled.push(data.workout.workout_type) }
+      }
+
+      setWhoopFields(filled)
+      setWhoopSynced(true)
+    } catch (e: any) {
+      console.error('Whoop sync error:', e)
+    }
+
+    setWhoopSyncing(false)
+  }
 
   const loadPhotosForDay = async (dayNum: number) => {
     const { data } = await supabase.from('photos').select('*').eq('day', dayNum)
@@ -74,6 +148,8 @@ export default function CheckIn() {
   const loadDay = async (dayNum: number) => {
     if (!dayNum || dayNum < 1 || dayNum > 100) return
     setLoading(true)
+    setWhoopSynced(false)
+    setWhoopFields([])
     const { data: habits } = await supabase.from('habits').select('*').eq('day', dayNum).single()
     const { data: log } = await supabase.from('daily_logs').select('*').eq('day', dayNum).single()
     if (habits || log) {
@@ -146,14 +222,8 @@ export default function CheckIn() {
         {[true, false].map(v => (
           <button key={String(v)} onClick={() => f(k, v)}
             style={{
-              padding: '8px 20px',
-              borderRadius: 10,
-              fontSize: '0.8125rem',
-              fontWeight: 600,
-              border: 'none',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-              fontFamily: 'inherit',
+              padding: '8px 20px', borderRadius: 10, fontSize: '0.8125rem', fontWeight: 600,
+              border: 'none', cursor: 'pointer', transition: 'all 0.2s ease', fontFamily: 'inherit',
               ...((form as any)[k] === v
                 ? (v ? { background: '#2d6a4f', color: 'white' } : { background: '#e63946', color: 'white' })
                 : { background: '#f0f0f0', color: '#6e6e73' })
@@ -214,6 +284,51 @@ export default function CheckIn() {
         <h1 style={{ fontSize: '2rem', fontWeight: 700, letterSpacing: '-0.03em', color: '#1d1d1f' }}>Check-in</h1>
       </div>
 
+      {/* Whoop Sync Card */}
+      <div className="card" style={{ padding: '20px 24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: whoopSynced ? 12 : 0 }}>
+          <div>
+            <p style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#1d1d1f', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: '1rem' }}>⌚</span> WHOOP
+              {whoopConnected === true && <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: '#2d6a4f', background: 'rgba(45,106,79,0.08)', padding: '2px 8px', borderRadius: 100 }}>Connected</span>}
+            </p>
+            <p style={{ fontSize: '0.6875rem', color: '#86868b', marginTop: 2 }}>
+              {whoopConnected === false ? 'Connect to auto-fill sleep, steps, workouts & meditation' : 'Auto-fill sleep, steps, workouts & meditation'}
+            </p>
+          </div>
+          {whoopConnected === false ? (
+            <a href="/api/whoop/login" style={{
+              padding: '8px 16px', borderRadius: 10, fontSize: '0.8125rem', fontWeight: 600,
+              background: '#1d1d1f', color: 'white', textDecoration: 'none', display: 'inline-block',
+            }}>Connect</a>
+          ) : (
+            <button onClick={syncWhoop} disabled={whoopSyncing} style={{
+              padding: '8px 16px', borderRadius: 10, fontSize: '0.8125rem', fontWeight: 600,
+              background: whoopSyncing ? '#c7c7cc' : '#2d6a4f', color: 'white', border: 'none',
+              cursor: whoopSyncing ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+            }}>
+              {whoopSyncing ? 'Syncing...' : '↻ Sync'}
+            </button>
+          )}
+        </div>
+        {whoopSynced && whoopFields.length > 0 && (
+          <div style={{
+            background: 'rgba(45,106,79,0.06)', borderRadius: 10, padding: '10px 14px',
+            fontSize: '0.75rem', color: '#2d6a4f', fontWeight: 500,
+          }}>
+            ✅ Filled: {whoopFields.join(', ')}
+          </div>
+        )}
+        {whoopSynced && whoopFields.length === 0 && (
+          <div style={{
+            background: 'rgba(134,134,139,0.08)', borderRadius: 10, padding: '10px 14px',
+            fontSize: '0.75rem', color: '#86868b', fontWeight: 500,
+          }}>
+            No Whoop data found for this date. Data may not have synced yet.
+          </div>
+        )}
+      </div>
+
       {/* Day Selector */}
       <div className="card" style={{ padding: '20px 24px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -262,21 +377,15 @@ export default function CheckIn() {
           {PHOTO_TYPES.map(({ key, label, icon }) => (
             <div key={key} style={{ textAlign: 'center' }}>
               <div style={{
-                aspectRatio: '1',
-                borderRadius: 12,
-                overflow: 'hidden',
-                background: '#f0f0f0',
-                marginBottom: 8,
-                position: 'relative',
+                aspectRatio: '1', borderRadius: 12, overflow: 'hidden', background: '#f0f0f0',
+                marginBottom: 8, position: 'relative',
                 border: photoPreviews[key] ? '2px solid #2d6a4f' : existingPhotos[key] ? '2px solid rgba(45,106,79,0.3)' : '2px dashed rgba(0,0,0,0.1)',
               }}>
                 {(photoPreviews[key] || existingPhotos[key]) ? (
                   <img src={photoPreviews[key] || existingPhotos[key]} alt={label}
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 ) : (
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', fontSize: '1.5rem' }}>
-                    {icon}
-                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', fontSize: '1.5rem' }}>{icon}</div>
                 )}
                 {photoPreviews[key] && (
                   <button onClick={() => handlePhotoSelect(key, null)}
@@ -343,10 +452,7 @@ export default function CheckIn() {
       <button onClick={save} disabled={saving || uploadingPhotos}
         className="btn-primary"
         style={{
-          width: '100%',
-          padding: '16px',
-          fontSize: '1rem',
-          marginBottom: 40,
+          width: '100%', padding: '16px', fontSize: '1rem', marginBottom: 40,
           opacity: (saving || uploadingPhotos) ? 0.5 : 1,
         }}>
         {uploadingPhotos ? '📸 Uploading photos...' : saving ? 'Saving...' : saved ? '✅ Saved!' : loadedDay ? `Update Day ${form.day}` : `Save Day ${form.day}`}
