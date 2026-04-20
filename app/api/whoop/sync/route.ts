@@ -6,6 +6,17 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
+// Convert UTC date to IST time string (HH:MM)
+function toIST(dateStr: string): string {
+  const d = new Date(dateStr)
+  // IST is UTC + 5:30
+  const istMs = d.getTime() + (5.5 * 60 * 60 * 1000)
+  const ist = new Date(istMs)
+  const hh = String(ist.getUTCHours()).padStart(2, '0')
+  const mm = String(ist.getUTCMinutes()).padStart(2, '0')
+  return `${hh}:${mm}`
+}
+
 // Refresh token if expired
 async function getValidToken() {
   const { data: tokenRow } = await supabase
@@ -20,12 +31,10 @@ async function getValidToken() {
   const now = new Date()
   const expiresAt = new Date(tokenRow.expires_at)
 
-  // If token is still valid (with 5 min buffer), use it
   if (expiresAt.getTime() - now.getTime() > 5 * 60 * 1000) {
     return tokenRow.access_token
   }
 
-  // Token expired — refresh it
   if (!tokenRow.refresh_token) return null
 
   try {
@@ -86,9 +95,10 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'Not connected to Whoop. Please connect first.', connected: false })
   }
 
-  // Set time range for the requested date (full day in UTC)
-  const startTime = `${dateParam}T00:00:00.000Z`
-  const endTime = `${dateParam}T23:59:59.999Z`
+  // Set time range for the requested date — use IST boundaries converted to UTC
+  // IST midnight = UTC 18:30 previous day
+  const startTime = `${dateParam}T00:00:00.000+05:30`
+  const endTime = `${dateParam}T23:59:59.999+05:30`
 
   const result: any = {
     connected: true,
@@ -110,8 +120,6 @@ export async function GET(req: Request) {
 
     if (sleepData?.records?.length > 0) {
       const sleep = sleepData.records[0]
-      const sleepStart = sleep.start ? new Date(sleep.start) : null
-      const sleepEnd = sleep.end ? new Date(sleep.end) : null
 
       let totalSleepMs = 0
       if (sleep.score?.stage_summary) {
@@ -119,16 +127,16 @@ export async function GET(req: Request) {
         totalSleepMs = (s.total_light_sleep_time_milli || 0) +
                        (s.total_slow_wave_sleep_time_milli || 0) +
                        (s.total_rem_sleep_time_milli || 0)
-      } else if (sleepStart && sleepEnd) {
-        totalSleepMs = sleepEnd.getTime() - sleepStart.getTime()
+      } else if (sleep.start && sleep.end) {
+        totalSleepMs = new Date(sleep.end).getTime() - new Date(sleep.start).getTime()
       }
 
       const sleepHours = Math.round((totalSleepMs / (1000 * 60 * 60)) * 10) / 10
 
       result.sleep = {
         sleep_hours: sleepHours,
-        sleep_time: sleepStart ? sleepStart.toTimeString().slice(0, 5) : null,
-        wake_time: sleepEnd ? sleepEnd.toTimeString().slice(0, 5) : null,
+        sleep_time: sleep.start ? toIST(sleep.start) : null,
+        wake_time: sleep.end ? toIST(sleep.end) : null,
         sleep_score: sleep.score?.sleep_performance_percentage || null,
       }
     }
@@ -146,27 +154,18 @@ export async function GET(req: Request) {
       let meditation = null
 
       for (const w of workouts) {
-        const sportName = (w.sport_id?.toString() || '').toLowerCase()
-        const scoreName = (w.score_type || '').toLowerCase()
-
-        // Whoop sport_id 82 = Meditation, also check score_type
-        if (w.sport_id === 82 || sportName.includes('meditat') || scoreName.includes('meditat')) {
-          const startT = w.start ? new Date(w.start) : null
-          const endT = w.end ? new Date(w.end) : null
-          const durationMs = (startT && endT) ? endT.getTime() - startT.getTime() : 0
+        // Whoop sport_id 82 = Meditation
+        if (w.sport_id === 82) {
+          const durationMs = (w.start && w.end) ? new Date(w.end).getTime() - new Date(w.start).getTime() : 0
           const durationMins = Math.round(durationMs / (1000 * 60))
 
           meditation = {
             meditate: true,
             meditate_mins: durationMins,
-            meditate_start: startT ? startT.toTimeString().slice(0, 5) : null,
-            meditate_end: endT ? endT.toTimeString().slice(0, 5) : null,
+            meditate_start: w.start ? toIST(w.start) : null,
+            meditate_end: w.end ? toIST(w.end) : null,
           }
         } else if (!mainWorkout) {
-          const startT = w.start ? new Date(w.start) : null
-          const endT = w.end ? new Date(w.end) : null
-
-          // Map common Whoop sport IDs to names
           const sportNames: Record<number, string> = {
             0: 'Running', 1: 'Cycling', 33: 'Swimming', 43: 'Weightlifting',
             44: 'CrossFit', 45: 'Weightlifting', 48: 'HIIT', 52: 'Yoga',
@@ -210,7 +209,6 @@ export async function GET(req: Request) {
 
     if (cycleData?.records?.length > 0) {
       const cycle = cycleData.records[0]
-      // Steps may be in the score object or at the top level
       if (cycle.score?.step_count !== undefined) {
         result.steps = cycle.score.step_count
       } else if (cycle.step_count !== undefined) {
