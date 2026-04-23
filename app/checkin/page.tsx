@@ -24,6 +24,11 @@ const DF: any = { day:'', date:new Date().toISOString().split('T')[0], weight:''
   sleep_hours:'', sleep_time:'', wake_time:'', zero_content:false, manifest:false,
   water_liters:'', yoga_sutras:false, zero_inbox:false, workout:false, workout_type:'', notes:'' }
 
+const PHOTO_TYPES = [
+  { key: 'scale', label: 'Scale', icon: '⚖️' },
+  { key: 'food', label: 'Meal', icon: '🍽️' },
+]
+
 export default function AddPage() {
   const [form, setForm] = useState({ ...DF, day: String(dayNum()), date: dayDate(dayNum()) })
   const [saving, setSaving] = useState(false)
@@ -32,9 +37,9 @@ export default function AddPage() {
   const [loading, setLoading] = useState(false)
   const [loadedDay, setLoadedDay] = useState<number | null>(null)
   const [existingDays, setExistingDays] = useState<number[]>([])
-  const [photos, setPhotos] = useState<Record<string, File | null>>({ scale: null, food: null, selfie: null })
-  const [previews, setPreviews] = useState<Record<string, string>>({ scale: '', food: '', selfie: '' })
-  const [existing, setExisting] = useState<Record<string, string>>({ scale: '', food: '', selfie: '' })
+  const [photos, setPhotos] = useState<Record<string, File | null>>({ scale: null, food: null })
+  const [previews, setPreviews] = useState<Record<string, string>>({ scale: '', food: '' })
+  const [existing, setExisting] = useState<Record<string, string>>({ scale: '', food: '' })
   const [uploading, setUploading] = useState(false)
   const [whoopOk, setWhoopOk] = useState<boolean | null>(null)
   const [syncing, setSyncing] = useState(false)
@@ -75,7 +80,7 @@ export default function AddPage() {
 
   const loadPhotos = async (d: number) => {
     const { data } = await supabase.from('photos').select('*').eq('day', d)
-    const ep: Record<string,string> = { scale:'', food:'', selfie:'' }
+    const ep: Record<string,string> = { scale: '', food: '' }
     if (data) data.forEach((p:any) => { if (ep.hasOwnProperty(p.type)) ep[p.type] = p.photo_url })
     setExisting(ep)
   }
@@ -94,7 +99,9 @@ export default function AddPage() {
         workout_type:h?.workout_type||'', notes:l?.notes||'' })
       setLoadedDay(d)
     } else { setForm({...DF, day:String(d), date:dayDate(d)}); setLoadedDay(null) }
-    await loadPhotos(d); setPhotos({scale:null,food:null,selfie:null}); setPreviews({scale:'',food:'',selfie:''}); setLoading(false)
+    await loadPhotos(d)
+    setPhotos({ scale: null, food: null }); setPreviews({ scale: '', food: '' })
+    setLoading(false)
   }
 
   const f = (k:string, v:any) => setForm((p:any) => ({...p, [k]:v}))
@@ -112,8 +119,11 @@ export default function AddPage() {
       await supabase.storage.from('photos').upload(fp, file, { upsert: true })
       const { data: u } = supabase.storage.from('photos').getPublicUrl(fp)
       const { data: ex } = await supabase.from('photos').select('id').eq('day', dayN).eq('type', type).single()
-      if (ex) await supabase.from('photos').update({ photo_url: u.publicUrl, caption: type }).eq('id', ex.id)
-      else await supabase.from('photos').insert({ day: dayN, type, photo_url: u.publicUrl, caption: type })
+      if (ex) {
+        await supabase.from('photos').update({ photo_url: u.publicUrl, caption: type }).eq('id', ex.id)
+      } else {
+        await supabase.from('photos').insert({ day: dayN, date: form.date, type, photo_url: u.publicUrl, caption: type })
+      }
     }
     setUploading(false)
   }
@@ -129,7 +139,7 @@ export default function AddPage() {
       yoga_sutras:form.yoga_sutras, zero_inbox:form.zero_inbox, workout:form.workout, workout_type:form.workout_type||null
     }, { onConflict:'day' })
     await doUpload(d); setSaving(false); setSaved(true); setLoadedDay(d)
-    await loadPhotos(d); setPhotos({scale:null,food:null,selfie:null}); setPreviews({scale:'',food:'',selfie:''})
+    await loadPhotos(d); setPhotos({ scale: null, food: null }); setPreviews({ scale: '', food: '' })
     setTimeout(() => setSaved(false), 3000)
   }
 
@@ -139,7 +149,7 @@ export default function AddPage() {
     await supabase.from('daily_logs').upsert({ day:d, date:form.date, weight:+form.weight||0, color, score, notes:form.notes||'' }, { onConflict:'day' })
     if (section === 'photos') {
       await doUpload(d); await loadPhotos(d)
-      setPhotos({scale:null,food:null,selfie:null}); setPreviews({scale:'',food:'',selfie:''})
+      setPhotos({ scale: null, food: null }); setPreviews({ scale: '', food: '' })
     } else {
       await supabase.from('habits').upsert({ day:d, omad:form.omad, meal_description:form.meal_description, steps:+form.steps,
         meditate:form.meditate, meditate_start:form.meditate_start||null, meditate_end:form.meditate_end||null,
@@ -166,14 +176,44 @@ export default function AddPage() {
     </div>
   )
 
-  const ValRow = ({ icon, iconBg, label, value, color, sub, k, placeholder, type }: any) => (
-    <div className="row">
-      <div className="row-icon" style={{ background: iconBg }}>{icon}</div>
-      <div className="row-body">
+  const InputRow = ({ icon, iconBg, label, value, k, placeholder, type, color, sub, step }: any) => (
+    <div className="row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center' }}>
+        <div className="row-icon" style={{ background: iconBg }}>{icon}</div>
         <span className={sub ? 'row-sub' : 'row-label'}>{label}</span>
-        <input className="row-input" type={type||'text'} value={value} onChange={(e:any) => f(k, e.target.value)}
-          placeholder={placeholder||''} style={{ color: color || '#000' }} />
       </div>
+      <input
+        type={type || 'text'}
+        inputMode={type === 'number' ? 'decimal' : undefined}
+        step={step}
+        value={value}
+        onChange={(e: any) => f(k, e.target.value)}
+        placeholder={placeholder || ''}
+        style={{
+          width: '100%', border: 'none', borderRadius: 8, padding: '10px 14px',
+          fontSize: 17, background: '#F2F2F7', fontFamily: 'inherit', color: color || '#000',
+          outline: 'none', WebkitAppearance: 'none',
+        }}
+      />
+    </div>
+  )
+
+  const TimeRow = ({ icon, iconBg, label, value, k, color, sub }: any) => (
+    <div className="row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center' }}>
+        <div className="row-icon" style={{ background: iconBg }}>{icon}</div>
+        <span className={sub ? 'row-sub' : 'row-label'}>{label}</span>
+      </div>
+      <input
+        type="time"
+        value={value}
+        onChange={(e: any) => f(k, e.target.value)}
+        style={{
+          width: '100%', border: 'none', borderRadius: 8, padding: '10px 14px',
+          fontSize: 17, background: '#F2F2F7', fontFamily: 'inherit', color: color || '#000',
+          outline: 'none', WebkitAppearance: 'none',
+        }}
+      />
     </div>
   )
 
@@ -219,6 +259,7 @@ export default function AddPage() {
           <button className="day-btn" onClick={() => goDay(String(Math.max(1,(+form.day||1)-1)))}>‹</button>
           <div style={{ flex:1, textAlign:'center' }}>
             <input type="number" value={form.day} onChange={e => goDay(e.target.value)}
+              inputMode="numeric"
               style={{ width:80, textAlign:'center', fontSize:22, fontWeight:700, border:'none', background:'transparent', fontFamily:'inherit', color:'#000', outline:'none', padding:0 }} min={1} max={100} />
             <p style={{ fontSize:12, color:'#8E8E93', marginTop:2 }}>
               {loading ? 'Loading...' : loadedDay ? `Editing · ${fmtDate(form.date)}` : form.day ? fmtDate(form.date) : ''}
@@ -242,30 +283,34 @@ export default function AddPage() {
       <p className="gh">Basics</p>
       <div className="card">
         <SH title="Weight & date" section="basics" color="#FF9500" />
-        <ValRow icon="⚖️" iconBg={ok} label="Weight" value={form.weight} k="weight" placeholder="kg" color="#FF9500" type="number" />
-        <Row icon="📅" iconBg="rgba(0,122,255,0.12)" label="Date">
-          <input className="row-input" type="date" value={form.date} onChange={(e:any) => f('date', e.target.value)} style={{ color:'#8E8E93' }} />
-        </Row>
+        <InputRow icon="⚖️" iconBg={ok} label="Weight" value={form.weight} k="weight" placeholder="Enter weight in kg" color="#FF9500" type="number" step="0.01" />
+        <div className="row">
+          <div className="row-icon" style={{ background:'rgba(0,122,255,0.12)' }}>📅</div>
+          <div className="row-body">
+            <span className="row-label">Date</span>
+            <span style={{ fontSize:15, color:'#8E8E93' }}>{fmtDate(form.date)}</span>
+          </div>
+        </div>
       </div>
 
       {/* Photos */}
       <p className="gh">Photos</p>
       <div className="card">
         <SH title="Daily photos" section="photos" color="#8E8E93" />
-        <div className="photo-grid">
-          {[{k:'scale',l:'Scale',i:'⚖️'},{k:'food',l:'Meal',i:'🍽️'},{k:'selfie',l:'Selfie',i:'🤳'}].map(({k,l,i}) => (
-            <label key={k} style={{ cursor:'pointer' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:10, padding:'10px 16px 14px' }}>
+          {PHOTO_TYPES.map(({key, label, icon}) => (
+            <label key={key} style={{ cursor:'pointer', display:'block' }}>
               <div className="photo-box" style={{
-                border: previews[k] ? '2px solid #34C759' : existing[k] ? '2px solid #34C75966' : '1.5px dashed #D1D1D6',
+                border: previews[key] ? '2px solid #34C759' : existing[key] ? '2px solid #34C75966' : '1.5px dashed #D1D1D6',
               }}>
-                {(previews[k] || existing[k]) ? (
-                  <img src={previews[k] || existing[k]} alt={l} />
+                {(previews[key] || existing[key]) ? (
+                  <img src={previews[key] || existing[key]} alt={label} />
                 ) : (
-                  <><span style={{ fontSize:22 }}>{i}</span><span style={{ fontSize:10, color:'#8E8E93', marginTop:3, fontWeight:500 }}>{l}</span></>
+                  <><span style={{ fontSize:28 }}>{icon}</span><span style={{ fontSize:11, color:'#8E8E93', marginTop:4, fontWeight:500 }}>{label}</span></>
                 )}
               </div>
               <input type="file" accept="image/*" style={{ display:'none' }}
-                onChange={e => pickPhoto(k, e.target.files?.[0] || null)} />
+                onChange={e => pickPhoto(key, e.target.files?.[0] || null)} />
             </label>
           ))}
         </div>
@@ -281,18 +326,18 @@ export default function AddPage() {
             <textarea className="notes-input" rows={2} value={form.meal_description} onChange={e => f('meal_description', e.target.value)} placeholder="What did you eat?" />
           </div>
         )}
-        <ValRow icon="🚶" iconBg={pk} label="Steps" value={form.steps} k="steps" placeholder="0" color="#FF2D55" type="number" />
+        <InputRow icon="🚶" iconBg={pk} label="Steps" value={form.steps} k="steps" placeholder="Enter step count" color="#FF2D55" type="number" />
         <Row icon="🧘" iconBg={pk} label="Meditate"><Toggle k="meditate" /></Row>
         {form.meditate && (
           <>
-            <ValRow icon="🧘" iconBg={pp} label="Duration" value={form.meditate_mins} k="meditate_mins" placeholder="min" color="#FF2D55" sub type="number" />
-            <ValRow icon="🧘" iconBg={pp} label="Start" value={form.meditate_start} k="meditate_start" color="#FF2D55" sub type="time" />
-            <ValRow icon="🧘" iconBg={pp} label="End" value={form.meditate_end} k="meditate_end" color="#FF2D55" sub type="time" />
+            <InputRow icon="🧘" iconBg={pp} label="Duration (mins)" value={form.meditate_mins} k="meditate_mins" placeholder="Enter minutes" color="#FF2D55" sub type="number" />
+            <TimeRow icon="🧘" iconBg={pp} label="Start time" value={form.meditate_start} k="meditate_start" color="#FF2D55" sub />
+            <TimeRow icon="🧘" iconBg={pp} label="End time" value={form.meditate_end} k="meditate_end" color="#FF2D55" sub />
           </>
         )}
-        <ValRow icon="😴" iconBg={pk} label="Sleep hours" value={form.sleep_hours} k="sleep_hours" placeholder="0" color="#FF2D55" type="number" />
-        <ValRow icon="🌙" iconBg={pp} label="Bedtime" value={form.sleep_time} k="sleep_time" color="#FF2D55" sub type="time" />
-        <ValRow icon="☀️" iconBg={ok} label="Wake time" value={form.wake_time} k="wake_time" color="#FF2D55" sub type="time" />
+        <InputRow icon="😴" iconBg={pk} label="Sleep hours" value={form.sleep_hours} k="sleep_hours" placeholder="Enter hours slept" color="#FF2D55" type="number" step="0.1" />
+        <TimeRow icon="🌙" iconBg={pp} label="Bedtime" value={form.sleep_time} k="sleep_time" color="#FF2D55" sub />
+        <TimeRow icon="☀️" iconBg={ok} label="Wake time" value={form.wake_time} k="wake_time" color="#FF2D55" sub />
         <Row icon="📵" iconBg={pk} label="Zero content"><Toggle k="zero_content" /></Row>
       </div>
 
@@ -301,12 +346,12 @@ export default function AddPage() {
       <div className="card">
         <SH title="5 bonus habits" section="best-effort" color="#34C759" />
         <Row icon="✨" iconBg={gk} label="Manifest"><Toggle k="manifest" green /></Row>
-        <ValRow icon="💧" iconBg={gk} label="Water (litres)" value={form.water_liters} k="water_liters" placeholder="0" color="#34C759" type="number" />
+        <InputRow icon="💧" iconBg={gk} label="Water (litres)" value={form.water_liters} k="water_liters" placeholder="Enter litres" color="#34C759" type="number" step="0.1" />
         <Row icon="📖" iconBg={gk} label="Yoga Sutras"><Toggle k="yoga_sutras" green /></Row>
         <Row icon="📬" iconBg={gk} label="Zero inbox"><Toggle k="zero_inbox" green /></Row>
         <Row icon="💪" iconBg={gk} label="Workout"><Toggle k="workout" green /></Row>
         {form.workout && (
-          <ValRow icon="🏊" iconBg={gk} label="Type" value={form.workout_type} k="workout_type" placeholder="Swimming..." color="#34C759" sub />
+          <InputRow icon="🏊" iconBg={gk} label="Workout type" value={form.workout_type} k="workout_type" placeholder="e.g. Swimming, Running" color="#34C759" sub />
         )}
       </div>
 
