@@ -1,10 +1,7 @@
 import type { Metadata } from 'next'
 import './globals.css'
 
-export const metadata: Metadata = {
-  title: 'Abhyasa100 — Monish Shah',
-  description: '100 Day Discipline Challenge',
-}
+export const metadata: Metadata = { title: 'Abhyasa100', description: '100 Day Discipline Challenge' }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
