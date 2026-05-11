@@ -49,8 +49,13 @@ export default function AddPage() {
   const loadPhotos = async (d: number, aid: number) => {
     const { data } = await supabase.from('photos').select('*').eq('day', d).eq('attempt_id', aid)
     const ep: Record<string, string> = { scale: '', food: '' }
-    if (data) data.forEach((p: any) => { if (ep.hasOwnProperty(p.type)) ep[p.type] = p.photo_url })
+    if (data) data.forEach((p: any) => {
+      if (ep.hasOwnProperty(p.type)) ep[p.type] = p.photo_url
+    })
     setExisting(ep)
+    // Mark existing photos as saved
+    if (ep.scale) setSavedItems(p => ({ ...p, 'photo-scale': true }))
+    if (ep.food) setSavedItems(p => ({ ...p, 'photo-food': true }))
   }
 
   const loadDay = async (d: number, aid?: number, sd?: string) => {
@@ -74,7 +79,23 @@ export default function AddPage() {
       setForm({ ...DF, day: String(d), date: dayDate(s, d) })
     }
     await loadPhotos(d, a)
-    setPhotos({ scale: null, food: null }); setPreviews({ scale: '', food: '' }); setSavedItems({})
+    setPhotos({ scale: null, food: null }); setPreviews({ scale: '', food: '' })
+    // Mark items that already have data as saved
+    const alreadySaved: Record<string, boolean> = {}
+    if (l?.weight) alreadySaved.weight = true
+    if (h?.omad || h?.full_fast_day) alreadySaved.omad = true
+    if (h?.steps) alreadySaved.steps = true
+    if (h?.fast_post_4pm) alreadySaved.fast4pm = true
+    if (h?.meditate) alreadySaved.meditate = true
+    if (h?.sleep_hours) alreadySaved.sleep = true
+    if (h?.zero_content) alreadySaved.zc = true
+    if (h?.manifest) alreadySaved.manifest = true
+    if (h?.water_liters) alreadySaved.water = true
+    if (h?.workout) alreadySaved.workout = true
+    if (h?.zero_inbox) alreadySaved.inbox = true
+    if (h?.yoga_sutras) alreadySaved.sutras = true
+    if (l?.notes) alreadySaved.notes = true
+    setSavedItems(alreadySaved)
   }
 
   const f = (k: string, v: any) => setForm((p: any) => ({ ...p, [k]: v }))
@@ -103,7 +124,6 @@ export default function AddPage() {
       await supabase.from('daily_logs').update({ color, score }).eq('day', d).eq('attempt_id', attemptId)
     }
     setSavedItems(p => ({ ...p, [itemKey]: true }))
-    setTimeout(() => setSavedItems(p => ({ ...p, [itemKey]: false })), 2000)
     // Update existing days list
     const { data: dl } = await supabase.from('daily_logs').select('day').eq('attempt_id', attemptId).order('day')
     if (dl) setExistingDays(dl.map(d => d.day))
@@ -126,7 +146,6 @@ export default function AddPage() {
     await loadPhotos(d, attemptId)
     setPhotos(p => ({ ...p, [type]: null })); setPreviews(p => ({ ...p, [type]: '' }))
     setSavedItems(p => ({ ...p, [`photo-${type}`]: true }))
-    setTimeout(() => setSavedItems(p => ({ ...p, [`photo-${type}`]: false })), 2000)
   }
 
   const pickPhoto = (type: string, file: File | null) => {
@@ -349,7 +368,7 @@ export default function AddPage() {
       <div className="card" style={{ padding: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
           <span style={{ fontSize: 15, fontWeight: 600 }}>How are you feeling?</span>
-          <ItemSave itemKey="notes" onSave={() => { supabase.from('daily_logs').upsert({ day: +form.day, date: form.date, attempt_id: attemptId, notes: form.notes, weight: +form.weight || 0 }, { onConflict: 'day,attempt_id' } as any); setSavedItems(p => ({ ...p, notes: true })); setTimeout(() => setSavedItems(p => ({ ...p, notes: false })), 2000) }} />
+          <ItemSave itemKey="notes" onSave={() => { supabase.from('daily_logs').upsert({ day: +form.day, date: form.date, attempt_id: attemptId, notes: form.notes, weight: +form.weight || 0 }, { onConflict: 'day,attempt_id' } as any); setSavedItems(p => ({ ...p, notes: true })) }} />
         </div>
         <textarea className="notes-input" rows={3} value={form.notes} onChange={e => f('notes', e.target.value)} placeholder="Write something..." />
       </div>
