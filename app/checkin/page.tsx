@@ -50,7 +50,7 @@ export default function AddPage() {
     const { data } = await supabase.from('photos').select('*').eq('day', d).eq('attempt_id', aid)
     const ep: Record<string, string> = { scale: '', food: '' }
     if (data) data.forEach((p: any) => {
-      if (ep.hasOwnProperty(p.type)) ep[p.type] = p.photo_url
+      if (ep.hasOwnProperty(p.type)) ep[p.type] = p.photo_url + '?t=' + Date.now()
     })
     setExisting(ep)
     // Mark existing photos as saved
