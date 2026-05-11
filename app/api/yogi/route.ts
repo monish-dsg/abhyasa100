@@ -3,151 +3,117 @@ import { createClient } from '@supabase/supabase-js'
 
 export const maxDuration = 30
 
-// Server-side Supabase client
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
 
-// Calculate color and score from habit data
-function getColor(d: any) {
-  const nonNeg = [d.omad, d.steps >= 10000, d.meditate, d.sleep_hours >= 6, d.zero_content]
-  const missed = nonNeg.filter((v: boolean) => v === false).length
-  const bonus = [d.manifest, d.water_liters >= 3, d.yoga_sutras, d.zero_inbox, d.workout]
+function getDayNumber(startDate: string): number {
+  return Math.max(1, Math.floor((new Date().getTime() - new Date(startDate + 'T00:00:00').getTime()) / 864e5) + 1)
+}
+
+function getColor(h: any) {
+  const mustHaves = [h.omad || h.full_fast_day, (h.steps || 0) >= 10000, h.fast_post_4pm]
+  const missedMust = mustHaves.filter((v: boolean) => !v).length
+  const bonus = [h.meditate, (h.sleep_hours || 0) >= 6, h.zero_content, h.manifest, (h.water_liters || 0) >= 3, h.workout, h.zero_inbox, h.yoga_sutras]
   const bonusDone = bonus.filter(Boolean).length
-  if (missed === 0 && bonusDone === 5) return { color: 'Dark Green', score: 10 }
-  if (missed === 0) return { color: 'Green', score: 5 + bonusDone }
-  if (missed === 1) return { color: 'Orange', score: 4 + bonusDone }
-  return { color: 'Red', score: nonNeg.filter(Boolean).length + bonusDone }
+  if (missedMust === 0 && bonusDone === 8) return { color: 'Perfect', score: 11 }
+  if (missedMust === 0) return { color: 'Solid', score: 3 + bonusDone }
+  if (missedMust >= 2) return { color: 'Slipped', score: Math.max(0, 3 - missedMust) + bonusDone }
+  return { color: 'Solid', score: 2 + bonusDone }
 }
 
-// Calculate the day number from the challenge start date
-function getDayNumber(dateStr?: string): number {
-  const startDate = new Date('2026-04-20')
-  const target = dateStr ? new Date(dateStr) : new Date()
-  const diff = Math.floor((target.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
-  return diff + 1 // Day 1 = April 20
-}
-
-// Save habits to Supabase
-async function saveHabits(params: any) {
-  const day = params.day || getDayNumber()
+async function saveHabits(params: any, attemptId: number) {
+  const { data: attempt } = await supabase.from('attempts').select('start_date').eq('attempt_number', attemptId).single()
+  const startDate = attempt?.start_date || new Date().toISOString().split('T')[0]
+  const day = params.day || getDayNumber(startDate)
   const date = params.date || new Date().toISOString().split('T')[0]
 
-  const habitData: any = { day }
-  if (params.omad !== undefined) habitData.omad = params.omad
-  if (params.steps !== undefined) habitData.steps = Number(params.steps)
-  if (params.meditate !== undefined) habitData.meditate = params.meditate
-  if (params.meditate_mins !== undefined) habitData.meditate_mins = Number(params.meditate_mins)
-  if (params.sleep_hours !== undefined) habitData.sleep_hours = Number(params.sleep_hours)
-  if (params.sleep_time !== undefined) habitData.sleep_time = params.sleep_time
-  if (params.wake_time !== undefined) habitData.wake_time = params.wake_time
-  if (params.zero_content !== undefined) habitData.zero_content = params.zero_content
-  if (params.manifest !== undefined) habitData.manifest = params.manifest
-  if (params.water_liters !== undefined) habitData.water_liters = Number(params.water_liters)
-  if (params.yoga_sutras !== undefined) habitData.yoga_sutras = params.yoga_sutras
-  if (params.zero_inbox !== undefined) habitData.zero_inbox = params.zero_inbox
-  if (params.workout !== undefined) habitData.workout = params.workout
-  if (params.workout_type !== undefined) habitData.workout_type = params.workout_type
-  if (params.meal_description !== undefined) habitData.meal_description = params.meal_description
+  await supabase.from('daily_logs').upsert({ day, date, attempt_id: attemptId, weight: params.weight || 0 }, { onConflict: 'day,attempt_id' } as any)
 
-  // First, get existing data for this day (so we can merge partial updates)
-  const { data: existing } = await supabase.from('habits').select('*').eq('day', day).single()
+  const { data: existing } = await supabase.from('habits').select('*').eq('day', day).eq('attempt_id', attemptId).single()
+  const habitData: any = { day, attempt_id: attemptId, ...existing }
 
-  const merged = { ...existing, ...habitData }
+  const fields = ['omad', 'full_fast_day', 'steps', 'fast_post_4pm', 'meditate', 'meditate_mins', 'sleep_hours', 'sleep_time', 'wake_time', 'zero_content', 'manifest', 'water_liters', 'yoga_sutras', 'zero_inbox', 'workout', 'workout_type', 'meal_description', 'protein_pct', 'fat_pct', 'carbs_pct']
+  fields.forEach(f => { if (params[f] !== undefined) habitData[f] = params[f] })
 
-  // Save habits
-  const { error: habitError } = await supabase.from('habits').upsert(merged, { onConflict: 'day' })
+  await supabase.from('habits').upsert(habitData, { onConflict: 'day,attempt_id' } as any)
 
-  // Calculate color & score from merged data
-  const { color, score } = getColor({
-    omad: merged.omad ?? false,
-    steps: merged.steps ?? 0,
-    meditate: merged.meditate ?? false,
-    sleep_hours: merged.sleep_hours ?? 0,
-    zero_content: merged.zero_content ?? false,
-    manifest: merged.manifest ?? false,
-    water_liters: merged.water_liters ?? 0,
-    yoga_sutras: merged.yoga_sutras ?? false,
-    zero_inbox: merged.zero_inbox ?? false,
-    workout: merged.workout ?? false,
-  })
+  const { data: h } = await supabase.from('habits').select('*').eq('day', day).eq('attempt_id', attemptId).single()
+  const { color, score } = getColor(h || {})
+  await supabase.from('daily_logs').update({ color, score }).eq('day', day).eq('attempt_id', attemptId)
 
-  // Save daily log
-  const logData: any = { day, date, color, score }
-  if (params.weight !== undefined) logData.weight = Number(params.weight)
-  if (params.notes !== undefined) logData.notes = params.notes
-
-  const { error: logError } = await supabase.from('daily_logs').upsert(logData, { onConflict: 'day' })
-
-  return {
-    success: !habitError && !logError,
-    day,
-    color,
-    score,
-    saved_fields: Object.keys(habitData).filter(k => k !== 'day'),
-    error: habitError?.message || logError?.message || null
-  }
+  return { success: true, day, color, score, saved_fields: Object.keys(params).filter(k => k !== 'day' && k !== 'date') }
 }
 
-// Gemini function declaration for save_habits
 const saveHabitsTool = {
   name: 'save_habits',
-  description: 'Save or update habit check-in data for a specific day. Call this whenever Monish reports completing or missing any habit, or shares any trackable data like steps, sleep, water, weight, etc. You can save partial data — you don\'t need all fields at once. The data merges with any existing data for that day.',
+  description: 'Save habit data. Call when Monish reports any habit, data point, or check-in. Partial saves work.',
   parameters: {
     type: 'object',
     properties: {
-      day: { type: 'integer', description: 'Day number of the challenge (1-100). If not specified, defaults to today.' },
-      date: { type: 'string', description: 'Date in YYYY-MM-DD format. Defaults to today.' },
-      weight: { type: 'number', description: 'Morning weight in kg' },
-      omad: { type: 'boolean', description: 'Whether OMAD (one meal a day) was followed' },
-      meal_description: { type: 'string', description: 'What the meal consisted of' },
-      steps: { type: 'integer', description: 'Step count for the day' },
-      meditate: { type: 'boolean', description: 'Whether meditation was done' },
-      meditate_mins: { type: 'integer', description: 'Minutes of meditation' },
+      day: { type: 'integer', description: 'Day number (1-100)' },
+      weight: { type: 'number', description: 'Weight in kg' },
+      omad: { type: 'boolean', description: 'OMAD done' },
+      full_fast_day: { type: 'boolean', description: 'Full fast day (no food)' },
+      meal_description: { type: 'string', description: 'What was eaten' },
+      steps: { type: 'integer', description: 'Step count' },
+      fast_post_4pm: { type: 'boolean', description: 'Fasted after 4pm' },
+      meditate: { type: 'boolean', description: 'Meditated' },
+      meditate_mins: { type: 'integer', description: 'Meditation minutes' },
       sleep_hours: { type: 'number', description: 'Hours of sleep' },
-      sleep_time: { type: 'string', description: 'Bedtime in HH:MM format' },
-      wake_time: { type: 'string', description: 'Wake time in HH:MM format' },
-      zero_content: { type: 'boolean', description: 'Whether zero content consumption was maintained' },
-      manifest: { type: 'boolean', description: 'Whether manifestation practice was done' },
-      water_liters: { type: 'number', description: 'Liters of water consumed' },
-      yoga_sutras: { type: 'boolean', description: 'Whether Yoga Sutras were read' },
-      zero_inbox: { type: 'boolean', description: 'Whether inbox zero was achieved' },
-      workout: { type: 'boolean', description: 'Whether a workout was done' },
-      workout_type: { type: 'string', description: 'Type of workout (e.g., swimming, running, gym)' },
-      notes: { type: 'string', description: 'Any additional notes for the day' },
-    },
-    required: []
+      zero_content: { type: 'boolean', description: 'Zero content consumption' },
+      manifest: { type: 'boolean', description: 'Manifestation done' },
+      water_liters: { type: 'number', description: 'Litres of water' },
+      yoga_sutras: { type: 'boolean', description: 'Read Yoga Sutras' },
+      zero_inbox: { type: 'boolean', description: 'Inbox zero achieved' },
+      workout: { type: 'boolean', description: 'Worked out' },
+      workout_type: { type: 'string', description: 'Type of workout' },
+      protein_pct: { type: 'number', description: 'Protein percentage of meal' },
+      fat_pct: { type: 'number', description: 'Fat percentage of meal' },
+      carbs_pct: { type: 'number', description: 'Carbs percentage of meal' },
+    }
   }
 }
 
 export async function POST(req: Request) {
   try {
-    const { messages, summary } = await req.json()
+    const { messages, summary, attemptId: aid, photo, photoType } = await req.json()
+    const attemptId = aid || 1
 
-    const systemInstruction = `You are Yogi, a life, fitness and yoga coach for Monish Shah, 42, vegan CEO of DreamSetGo doing a 100-day discipline challenge called Abhyasa100 rooted in Abhyasa and Vairagya from the Yoga Sutras of Patanjali.
+    const { data: attempt } = await supabase.from('attempts').select('start_date').eq('attempt_number', attemptId).single()
+    const startDate = attempt?.start_date || '2026-05-12'
+    const dayNum = getDayNumber(startDate)
 
-The challenge started on April 20, 2026. Today is ${new Date().toISOString().split('T')[0]}, which is Day ${getDayNumber()}.
+    const systemInstruction = `You are Yogi, Monish Shah's AI life, fitness and yoga coach. He is 42, vegan CEO of DreamSetGo, doing a 100-day discipline challenge called Abhyasa100.
 
-Be direct, warm, and TOUGH when habits are missed. You are his accountability coach — not his friend.
+Attempt ${attemptId}. Today is Day ${dayNum} (${new Date().toISOString().split('T')[0]}).
 
-Non-negotiables (5): OMAD, 10k steps, meditation, 6hr sleep, zero content consumption
-Best-effort (5): manifestation, 3L water, yoga sutras reading, zero inbox, workout
+Must-Have habits (3): OMAD (or full fast day), 10k steps, Fast post 4pm
+Bonus habits (8): Meditate, Sleep 6h, Zero content, Manifest, Water 3L, Workout, Zero inbox, Yoga Sutras
 
-IMPORTANT: Whenever Monish tells you about any habit completion, data point (steps, sleep, water, weight, etc.), or check-in — use the save_habits function to record it immediately. You can save partial data. If he says "I did 12000 steps today and meditated for 20 mins", save steps=12000, meditate=true, meditate_mins=20.
+CRITICAL: When Monish tells you about ANY habit, save it immediately using save_habits.
+When he uploads a food photo, analyze the macros (protein %, fat %, carbs %) and save them.
+When he asks for workout recommendations, give specific exercises.
+When he asks about his data, analyze from the summary below.
+Be direct, warm, and TOUGH when habits are missed.
 
-If he mentions a specific day number, use that day. Otherwise default to today (Day ${getDayNumber()}).
+Journey so far:\n${summary || 'No data yet'}`
 
-Journey so far:
-${summary}`
-
-    // Build Gemini messages format
-    const geminiMessages = messages.slice(-10).map((m: any) => ({
+    // Build Gemini messages
+    const geminiMessages = messages.slice(-12).map((m: any) => ({
       role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: m.content }]
+      parts: m.role === 'system' ? [{ text: m.content }] : [{ text: m.content }]
     }))
 
-    // First call to Gemini
+    // If photo is included, add it to the last user message
+    if (photo && geminiMessages.length > 0) {
+      const lastMsg = geminiMessages[geminiMessages.length - 1]
+      if (lastMsg.role === 'user') {
+        lastMsg.parts = [
+          { inline_data: { mime_type: photoType || 'image/jpeg', data: photo } },
+          { text: lastMsg.parts[0].text + '\n\nPlease analyze this food photo and break down the macros (Protein %, Fat %, Carbs %). Then save the data.' }
+        ]
+      }
+    }
+
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
       {
@@ -162,28 +128,18 @@ ${summary}`
     )
 
     const data = await response.json()
-
-    if (!response.ok) {
-      return NextResponse.json({ reply: `Error from Gemini: ${JSON.stringify(data)}` })
-    }
+    if (!response.ok) return NextResponse.json({ reply: `Error from Gemini: ${JSON.stringify(data)}` })
 
     const candidate = data.candidates?.[0]
-    if (!candidate) {
-      return NextResponse.json({ reply: 'No response from Yogi. Try again.' })
-    }
+    if (!candidate) return NextResponse.json({ reply: 'No response from Yogi.' })
 
-    // Check if Gemini wants to call save_habits
     const parts = candidate.content?.parts || []
     const functionCall = parts.find((p: any) => p.functionCall)
     const textPart = parts.find((p: any) => p.text)
 
-    let savedResult = null
-
     if (functionCall && functionCall.functionCall.name === 'save_habits') {
-      // Execute the function
-      savedResult = await saveHabits(functionCall.functionCall.args)
+      const savedResult = await saveHabits(functionCall.functionCall.args, attemptId)
 
-      // Send function result back to Gemini for final response
       const followUp = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
         {
@@ -194,15 +150,7 @@ ${summary}`
             contents: [
               ...geminiMessages,
               candidate.content,
-              {
-                role: 'user',
-                parts: [{
-                  functionResponse: {
-                    name: 'save_habits',
-                    response: savedResult
-                  }
-                }]
-              }
+              { role: 'user', parts: [{ functionResponse: { name: 'save_habits', response: savedResult } }] }
             ],
             tools: [{ function_declarations: [saveHabitsTool] }],
           })
@@ -213,16 +161,13 @@ ${summary}`
       const followUpText = followUpData.candidates?.[0]?.content?.parts?.find((p: any) => p.text)?.text
 
       return NextResponse.json({
-        reply: followUpText || `✅ Saved Day ${savedResult.day} data (${savedResult.color}, ${savedResult.score}/10)`,
-        saved: savedResult
+        reply: followUpText || `✅ Saved Day ${savedResult.day} (${savedResult.color}, ${savedResult.score}/11)`,
+        saved: savedResult,
+        macros: functionCall.functionCall.args.protein_pct ? { protein: functionCall.functionCall.args.protein_pct, fat: functionCall.functionCall.args.fat_pct, carbs: functionCall.functionCall.args.carbs_pct } : null
       })
     }
 
-    // No function call — just a regular text response
-    return NextResponse.json({
-      reply: textPart?.text || 'Yogi has nothing to say. That means you should be doing your habits.',
-      saved: null
-    })
+    return NextResponse.json({ reply: textPart?.text || 'Yogi has nothing to say.', saved: null })
 
   } catch (e: any) {
     return NextResponse.json({ reply: `Error: ${e.message}` })
