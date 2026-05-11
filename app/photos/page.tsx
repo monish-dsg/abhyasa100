@@ -18,11 +18,23 @@ export default function Photos() {
     })
   }, [])
 
-  const deletePhoto = async (id: number) => {
+  const deletePhoto = async (id: number, photoUrl: string) => {
+    // Delete from Storage
+    try {
+      const url = new URL(photoUrl.split('?')[0])
+      const pathParts = url.pathname.split('/storage/v1/object/public/photos/')
+      if (pathParts[1]) {
+        await supabase.storage.from('photos').remove([decodeURIComponent(pathParts[1])])
+      }
+    } catch (e) { console.error('Storage delete error:', e) }
+    // Delete from database
     await supabase.from('photos').delete().eq('id', id)
     setPhotos(p => p.filter(x => x.id !== id))
     setDeleting(null)
   }
+
+  // Add cache-busting to photo URLs
+  const imgUrl = (url: string) => url ? url.split('?')[0] + '?t=' + Date.now() : ''
 
   const byDay = photos.reduce((a, p) => { if (!a[p.day]) a[p.day] = []; a[p.day].push(p); return a }, {} as Record<number, any[]>)
 
@@ -51,7 +63,7 @@ export default function Photos() {
                 {/* Scale photo or placeholder */}
                 {hasScale ? dayPhotos.filter((p: any) => p.type === 'scale').map((p: any) => (
                   <div key={p.id} style={{ position: 'relative', aspectRatio: '1', overflow: 'hidden' }}>
-                    <img src={p.photo_url} alt="Scale" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <img src={imgUrl(p.photo_url)} alt="Scale" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '16px 8px 6px', background: 'linear-gradient(transparent, rgba(0,0,0,0.4))' }}>
                       <span style={{ fontSize: 11, fontWeight: 600, color: '#fff' }}>⚖️ Scale</span>
                     </div>
@@ -59,7 +71,7 @@ export default function Photos() {
                       <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
                         <p style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>Delete this photo?</p>
                         <div style={{ display: 'flex', gap: 8 }}>
-                          <button onClick={() => deletePhoto(p.id)} style={{ padding: '8px 16px', borderRadius: 8, background: '#FF3B30', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Delete</button>
+                          <button onClick={() => deletePhoto(p.id, p.photo_url)} style={{ padding: '8px 16px', borderRadius: 8, background: '#FF3B30', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Delete</button>
                           <button onClick={() => setDeleting(null)} style={{ padding: '8px 16px', borderRadius: 8, background: 'rgba(255,255,255,0.2)', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
                         </div>
                       </div>
@@ -77,7 +89,7 @@ export default function Photos() {
                 {/* Food photo or placeholder */}
                 {hasFood ? dayPhotos.filter((p: any) => p.type === 'food').map((p: any) => (
                   <div key={p.id} style={{ position: 'relative', aspectRatio: '1', overflow: 'hidden' }}>
-                    <img src={p.photo_url} alt="Meal" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <img src={imgUrl(p.photo_url)} alt="Meal" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '16px 8px 6px', background: 'linear-gradient(transparent, rgba(0,0,0,0.4))' }}>
                       <span style={{ fontSize: 11, fontWeight: 600, color: '#fff' }}>🍽️ Meal</span>
                     </div>
@@ -85,7 +97,7 @@ export default function Photos() {
                       <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
                         <p style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>Delete this photo?</p>
                         <div style={{ display: 'flex', gap: 8 }}>
-                          <button onClick={() => deletePhoto(p.id)} style={{ padding: '8px 16px', borderRadius: 8, background: '#FF3B30', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Delete</button>
+                          <button onClick={() => deletePhoto(p.id, p.photo_url)} style={{ padding: '8px 16px', borderRadius: 8, background: '#FF3B30', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Delete</button>
                           <button onClick={() => setDeleting(null)} style={{ padding: '8px 16px', borderRadius: 8, background: 'rgba(255,255,255,0.2)', color: '#fff', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
                         </div>
                       </div>
