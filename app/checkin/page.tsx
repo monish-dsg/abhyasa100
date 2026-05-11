@@ -1,230 +1,168 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../../lib/supabase'
 
-// @ts-nocheck
-const START = new Date('2026-04-20')
-function dayNum(): number { return Math.max(1, Math.floor((new Date().getTime() - START.getTime()) / 864e5) + 1) }
-function dayDate(d: number): string { const x = new Date(START); x.setDate(x.getDate() + d - 1); return x.toISOString().split('T')[0] }
-function fmtDate(d: string): string { const x = new Date(d + 'T00:00:00'); return x.toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }) }
-
-const calcColor = (d: any) => {
-  const nn = [d.omad, d.steps >= 10000, d.meditate, d.sleep_hours >= 6, d.zero_content]
-  const missed = nn.filter((v: boolean) => !v).length
-  const be = [d.manifest, d.water_liters >= 3, d.yoga_sutras, d.zero_inbox, d.workout]
-  const bonus = be.filter(Boolean).length
-  if (missed === 0 && bonus === 5) return { color: 'Dark Green', score: 10 }
-  if (missed === 0) return { color: 'Green', score: 5 + bonus }
-  if (missed === 1) return { color: 'Orange', score: 4 + bonus }
-  return { color: 'Red', score: nn.filter(Boolean).length + bonus }
+const getStartDate = async () => {
+  const { data } = await supabase.from('attempts').select('*').eq('status', 'active').order('attempt_number', { ascending: false }).limit(1)
+  return { startDate: data?.[0]?.start_date || new Date().toISOString().split('T')[0], attemptId: data?.[0]?.attempt_number || 1 }
 }
 
-const DF: any = { day:'', date:new Date().toISOString().split('T')[0], weight:'', omad:false, meal_description:'',
-  steps:'', meditate:false, meditate_start:'', meditate_end:'', meditate_mins:'',
-  sleep_hours:'', sleep_time:'', wake_time:'', zero_content:false, manifest:false,
-  water_liters:'', yoga_sutras:false, zero_inbox:false, workout:false, workout_type:'', notes:'' }
+function dayDate(start: string, d: number): string { const x = new Date(start + 'T00:00:00'); x.setDate(x.getDate() + d - 1); return x.toISOString().split('T')[0] }
+function fmtDate(d: string): string { return new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }) }
 
-const PHOTO_TYPES = [
-  { key: 'scale', label: 'Scale', icon: '⚖️' },
-  { key: 'food', label: 'Meal', icon: '🍽️' },
-]
+const DF: any = { day:'', date:'', weight:'', omad:false, full_fast_day:false, meal_description:'',
+  steps:'', fast_post_4pm:false, meditate:false, meditate_mins:'', meditate_start:'', meditate_end:'',
+  sleep_hours:'', sleep_time:'', wake_time:'', zero_content:false, manifest:false,
+  water_liters:'', yoga_sutras:false, zero_inbox:false, workout:false, workout_type:'', notes:'',
+  protein_pct:'', fat_pct:'', carbs_pct:'' }
 
 export default function AddPage() {
-  const [form, setForm] = useState({ ...DF, day: String(dayNum()), date: dayDate(dayNum()) })
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
-  const [sectionSaved, setSectionSaved] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [loadedDay, setLoadedDay] = useState<number | null>(null)
+  const [form, setForm] = useState<any>({ ...DF })
+  const [attemptId, setAttemptId] = useState(1)
+  const [startDate, setStartDate] = useState('')
+  const [loading, setLoading] = useState(true)
   const [existingDays, setExistingDays] = useState<number[]>([])
   const [photos, setPhotos] = useState<Record<string, File | null>>({ scale: null, food: null })
   const [previews, setPreviews] = useState<Record<string, string>>({ scale: '', food: '' })
   const [existing, setExisting] = useState<Record<string, string>>({ scale: '', food: '' })
-  const [uploading, setUploading] = useState(false)
+  const [savedItems, setSavedItems] = useState<Record<string, boolean>>({})
   const [whoopOk, setWhoopOk] = useState<boolean | null>(null)
   const [syncing, setSyncing] = useState(false)
-  const [synced, setSynced] = useState(false)
   const [syncFields, setSyncFields] = useState<string[]>([])
 
+  // Init
   useEffect(() => {
-    supabase.from('daily_logs').select('day').order('day').then(({ data }) => { if (data) setExistingDays(data.map(d => d.day)) })
-    fetch('/api/whoop/sync?date=2026-01-01').then(r => r.json()).then(d => setWhoopOk(d.connected !== false)).catch(() => setWhoopOk(false))
-  }, [saved])
+    (async () => {
+      const { startDate: sd, attemptId: aid } = await getStartDate()
+      setStartDate(sd); setAttemptId(aid)
+      const today = new Date()
+      const dayNum = Math.max(1, Math.floor((today.getTime() - new Date(sd + 'T00:00:00').getTime()) / 864e5) + 1)
+      setForm((p: any) => ({ ...p, day: String(dayNum), date: dayDate(sd, dayNum) }))
+      loadDay(dayNum, aid, sd)
+      const { data: dl } = await supabase.from('daily_logs').select('day').eq('attempt_id', aid).order('day')
+      if (dl) setExistingDays(dl.map(d => d.day))
+      fetch('/api/whoop/sync?date=2026-01-01').then(r => r.json()).then(d => setWhoopOk(d.connected !== false)).catch(() => setWhoopOk(false))
+      setLoading(false)
+    })()
+  }, [])
+
+  const loadPhotos = async (d: number, aid: number) => {
+    const { data } = await supabase.from('photos').select('*').eq('day', d).eq('attempt_id', aid)
+    const ep: Record<string, string> = { scale: '', food: '' }
+    if (data) data.forEach((p: any) => { if (ep.hasOwnProperty(p.type)) ep[p.type] = p.photo_url })
+    setExisting(ep)
+  }
+
+  const loadDay = async (d: number, aid?: number, sd?: string) => {
+    const a = aid || attemptId; const s = sd || startDate
+    if (!d || d < 1 || d > 100) return
+    const { data: h } = await supabase.from('habits').select('*').eq('day', d).eq('attempt_id', a).single()
+    const { data: l } = await supabase.from('daily_logs').select('*').eq('day', d).eq('attempt_id', a).single()
+    if (h || l) {
+      setForm({ day: String(d), date: l?.date || dayDate(s, d), weight: l?.weight ? String(l.weight) : '',
+        omad: h?.omad ?? false, full_fast_day: h?.full_fast_day ?? false, meal_description: h?.meal_description || '',
+        steps: h?.steps ? String(h.steps) : '', fast_post_4pm: h?.fast_post_4pm ?? false,
+        meditate: h?.meditate ?? false, meditate_mins: h?.meditate_mins ? String(h.meditate_mins) : '',
+        meditate_start: h?.meditate_start || '', meditate_end: h?.meditate_end || '',
+        sleep_hours: h?.sleep_hours ? String(h.sleep_hours) : '', sleep_time: h?.sleep_time || '', wake_time: h?.wake_time || '',
+        zero_content: h?.zero_content ?? false, manifest: h?.manifest ?? false,
+        water_liters: h?.water_liters ? String(h.water_liters) : '', yoga_sutras: h?.yoga_sutras ?? false,
+        zero_inbox: h?.zero_inbox ?? false, workout: h?.workout ?? false, workout_type: h?.workout_type || '',
+        notes: l?.notes || '', protein_pct: h?.protein_pct ? String(h.protein_pct) : '',
+        fat_pct: h?.fat_pct ? String(h.fat_pct) : '', carbs_pct: h?.carbs_pct ? String(h.carbs_pct) : '' })
+    } else {
+      setForm({ ...DF, day: String(d), date: dayDate(s, d) })
+    }
+    await loadPhotos(d, a)
+    setPhotos({ scale: null, food: null }); setPreviews({ scale: '', food: '' }); setSavedItems({})
+  }
+
+  const f = (k: string, v: any) => setForm((p: any) => ({ ...p, [k]: v }))
+  const goDay = (v: string) => { f('day', v); const n = parseInt(v); if (n >= 1 && n <= 100) { f('date', dayDate(startDate, n)); loadDay(n) } }
+
+  // Save individual item
+  const saveItem = async (fields: Record<string, any>, itemKey: string) => {
+    if (!form.day) return; const d = +form.day
+    // Ensure daily_log exists
+    await supabase.from('daily_logs').upsert({ day: d, date: form.date, attempt_id: attemptId, weight: +form.weight || 0 }, { onConflict: 'day,attempt_id' } as any)
+    // Upsert habits
+    const habitData: any = { day: d, attempt_id: attemptId, ...fields }
+    await supabase.from('habits').upsert(habitData, { onConflict: 'day,attempt_id' } as any)
+    // Recalc color
+    const { data: h } = await supabase.from('habits').select('*').eq('day', d).eq('attempt_id', attemptId).single()
+    if (h) {
+      const mustHaves = [h.omad || h.full_fast_day, (h.steps || 0) >= 10000, h.fast_post_4pm]
+      const missedMust = mustHaves.filter((v: boolean) => !v).length
+      const bonus = [h.meditate, (h.sleep_hours || 0) >= 6, h.zero_content, h.manifest, (h.water_liters || 0) >= 3, h.workout, h.zero_inbox, h.yoga_sutras]
+      const bonusDone = bonus.filter(Boolean).length
+      let color = 'Missed', score = 0
+      if (missedMust === 0 && bonusDone === 8) { color = 'Perfect'; score = 11 }
+      else if (missedMust === 0) { color = 'Solid'; score = 3 + bonusDone }
+      else if (missedMust >= 2) { color = 'Slipped'; score = Math.max(0, 3 - missedMust) + bonusDone }
+      else { color = 'Solid'; score = 2 + bonusDone }
+      await supabase.from('daily_logs').update({ color, score }).eq('day', d).eq('attempt_id', attemptId)
+    }
+    setSavedItems(p => ({ ...p, [itemKey]: true }))
+    setTimeout(() => setSavedItems(p => ({ ...p, [itemKey]: false })), 2000)
+    // Update existing days list
+    const { data: dl } = await supabase.from('daily_logs').select('day').eq('attempt_id', attemptId).order('day')
+    if (dl) setExistingDays(dl.map(d => d.day))
+  }
+
+  const saveWeight = () => saveItem({ }, 'weight').then(() => {
+    supabase.from('daily_logs').update({ weight: +form.weight }).eq('day', +form.day).eq('attempt_id', attemptId)
+  })
+
+  const savePhoto = async (type: string) => {
+    const file = photos[type]; if (!file || !form.day) return; const d = +form.day
+    const ext = file.name.split('.').pop() || 'jpg'
+    const fp = `attempt-${attemptId}/day-${d}/${type}.${ext}`
+    await supabase.storage.from('photos').upload(fp, file, { upsert: true })
+    const { data: u } = supabase.storage.from('photos').getPublicUrl(fp)
+    await supabase.from('daily_logs').upsert({ day: d, date: form.date, attempt_id: attemptId, weight: +form.weight || 0 }, { onConflict: 'day,attempt_id' } as any)
+    const { data: ex } = await supabase.from('photos').select('id').eq('day', d).eq('type', type).eq('attempt_id', attemptId).single()
+    if (ex) await supabase.from('photos').update({ photo_url: u.publicUrl }).eq('id', ex.id)
+    else await supabase.from('photos').insert({ day: d, date: form.date, type, photo_url: u.publicUrl, caption: type, attempt_id: attemptId })
+    await loadPhotos(d, attemptId)
+    setPhotos(p => ({ ...p, [type]: null })); setPreviews(p => ({ ...p, [type]: '' }))
+    setSavedItems(p => ({ ...p, [`photo-${type}`]: true }))
+    setTimeout(() => setSavedItems(p => ({ ...p, [`photo-${type}`]: false })), 2000)
+  }
+
+  const pickPhoto = (type: string, file: File | null) => {
+    setPhotos(p => ({ ...p, [type]: file }))
+    setPreviews(p => ({ ...p, [type]: file ? URL.createObjectURL(file) : '' }))
+  }
 
   const syncWhoop = async () => {
-    if (!form.date) return; setSyncing(true); setSynced(false); setSyncFields([])
+    if (!form.date) return; setSyncing(true); setSyncFields([])
     try {
       const d = await (await fetch(`/api/whoop/sync?date=${form.date}`)).json()
       if (!d.connected) { setWhoopOk(false); setSyncing(false); return }
       const fl: string[] = []
       if (d.sleep) {
-        if (d.sleep.sleep_hours) { setForm((p:any) => ({...p, sleep_hours: String(d.sleep.sleep_hours)})); fl.push('Sleep') }
-        if (d.sleep.sleep_time) { setForm((p:any) => ({...p, sleep_time: d.sleep.sleep_time})); fl.push('Bedtime') }
-        if (d.sleep.wake_time) { setForm((p:any) => ({...p, wake_time: d.sleep.wake_time})); fl.push('Wake') }
+        if (d.sleep.sleep_hours) { f('sleep_hours', String(d.sleep.sleep_hours)); fl.push('Sleep') }
+        if (d.sleep.sleep_time) { f('sleep_time', d.sleep.sleep_time); fl.push('Bedtime') }
+        if (d.sleep.wake_time) { f('wake_time', d.sleep.wake_time); fl.push('Wake') }
       }
-      if (d.steps != null) { setForm((p:any) => ({...p, steps: String(d.steps)})); fl.push('Steps') }
-      if (d.meditation) {
-        setForm((p:any) => ({...p, meditate: true})); fl.push('Meditation')
-        if (d.meditation.meditate_mins) setForm((p:any) => ({...p, meditate_mins: String(d.meditation.meditate_mins)}))
-        if (d.meditation.meditate_start) setForm((p:any) => ({...p, meditate_start: d.meditation.meditate_start}))
-        if (d.meditation.meditate_end) setForm((p:any) => ({...p, meditate_end: d.meditation.meditate_end}))
-      }
-      if (d.workout) {
-        setForm((p:any) => ({...p, workout: true})); fl.push('Workout')
-        if (d.workout.workout_type) setForm((p:any) => ({...p, workout_type: d.workout.workout_type}))
-      }
-      setSyncFields(fl); setSynced(true)
-    } catch(e) { console.error(e) }
+      if (d.steps != null) { f('steps', String(d.steps)); fl.push('Steps') }
+      if (d.meditation) { f('meditate', true); fl.push('Meditation'); if (d.meditation.meditate_mins) f('meditate_mins', String(d.meditation.meditate_mins)) }
+      if (d.workout) { f('workout', true); fl.push('Workout'); if (d.workout.workout_type) f('workout_type', d.workout.workout_type) }
+      setSyncFields(fl)
+    } catch (e) { console.error(e) }
     setSyncing(false)
   }
 
-  const loadPhotos = async (d: number) => {
-    const { data } = await supabase.from('photos').select('*').eq('day', d)
-    const ep: Record<string,string> = { scale: '', food: '' }
-    if (data) data.forEach((p:any) => { if (ep.hasOwnProperty(p.type)) ep[p.type] = p.photo_url })
-    setExisting(ep)
-  }
-
-  const loadDay = async (d: number) => {
-    if (!d || d < 1 || d > 100) return; setLoading(true); setSynced(false); setSyncFields([])
-    const { data: h } = await supabase.from('habits').select('*').eq('day', d).single()
-    const { data: l } = await supabase.from('daily_logs').select('*').eq('day', d).single()
-    if (h || l) {
-      setForm({ day:String(d), date:l?.date||dayDate(d), weight:l?.weight?String(l.weight):'', omad:h?.omad??false,
-        meal_description:h?.meal_description||'', steps:h?.steps?String(h.steps):'', meditate:h?.meditate??false,
-        meditate_start:h?.meditate_start||'', meditate_end:h?.meditate_end||'', meditate_mins:h?.meditate_mins?String(h.meditate_mins):'',
-        sleep_hours:h?.sleep_hours?String(h.sleep_hours):'', sleep_time:h?.sleep_time||'', wake_time:h?.wake_time||'',
-        zero_content:h?.zero_content??false, manifest:h?.manifest??false, water_liters:h?.water_liters?String(h.water_liters):'',
-        yoga_sutras:h?.yoga_sutras??false, zero_inbox:h?.zero_inbox??false, workout:h?.workout??false,
-        workout_type:h?.workout_type||'', notes:l?.notes||'' })
-      setLoadedDay(d)
-    } else { setForm({...DF, day:String(d), date:dayDate(d)}); setLoadedDay(null) }
-    await loadPhotos(d)
-    setPhotos({ scale: null, food: null }); setPreviews({ scale: '', food: '' })
-    setLoading(false)
-  }
-
-  const f = (k:string, v:any) => setForm((p:any) => ({...p, [k]:v}))
-  const goDay = (v:string) => { f('day',v); const n=parseInt(v); if(n>=1&&n<=100){f('date',dayDate(n));loadDay(n)} }
-
-  const pickPhoto = (type:string, file:File|null) => {
-    setPhotos(p => ({...p, [type]: file}))
-    setPreviews(p => ({...p, [type]: file ? URL.createObjectURL(file) : ''}))
-  }
-
-  const doUpload = async (dayN: number) => {
-    const pts = Object.entries(photos).filter(([_,f]) => f !== null); if (!pts.length) return; setUploading(true)
-    for (const [type, file] of pts) {
-      if (!file) continue; const ext = file.name.split('.').pop()||'jpg'; const fp = `day-${dayN}/${type}.${ext}`
-      await supabase.storage.from('photos').upload(fp, file, { upsert: true })
-      const { data: u } = supabase.storage.from('photos').getPublicUrl(fp)
-      const { data: ex } = await supabase.from('photos').select('id').eq('day', dayN).eq('type', type).single()
-      if (ex) {
-        await supabase.from('photos').update({ photo_url: u.publicUrl, caption: type }).eq('id', ex.id)
-      } else {
-        await supabase.from('photos').insert({ day: dayN, date: form.date, type, photo_url: u.publicUrl, caption: type })
-      }
-    }
-    setUploading(false)
-  }
-
-  const saveAll = async () => {
-    if (!form.day) return alert('Enter day number!'); setSaving(true); const d = +form.day
-    const { color, score } = calcColor({...form, steps:+form.steps, sleep_hours:+form.sleep_hours, water_liters:+form.water_liters})
-    await supabase.from('daily_logs').upsert({ day:d, date:form.date, weight:+form.weight||0, color, score, notes:form.notes }, { onConflict:'day' })
-    await supabase.from('habits').upsert({ day:d, omad:form.omad, meal_description:form.meal_description, steps:+form.steps,
-      meditate:form.meditate, meditate_start:form.meditate_start||null, meditate_end:form.meditate_end||null,
-      meditate_mins:+form.meditate_mins||null, sleep_hours:+form.sleep_hours, sleep_time:form.sleep_time||null,
-      wake_time:form.wake_time||null, zero_content:form.zero_content, manifest:form.manifest, water_liters:+form.water_liters,
-      yoga_sutras:form.yoga_sutras, zero_inbox:form.zero_inbox, workout:form.workout, workout_type:form.workout_type||null
-    }, { onConflict:'day' })
-    await doUpload(d); setSaving(false); setSaved(true); setLoadedDay(d)
-    await loadPhotos(d); setPhotos({ scale: null, food: null }); setPreviews({ scale: '', food: '' })
-    setTimeout(() => setSaved(false), 3000)
-  }
-
-  const saveSection = async (section: string) => {
-    if (!form.day) return; const d = +form.day
-    const { color, score } = calcColor({...form, steps:+form.steps, sleep_hours:+form.sleep_hours, water_liters:+form.water_liters})
-    await supabase.from('daily_logs').upsert({ day:d, date:form.date, weight:+form.weight||0, color, score, notes:form.notes||'' }, { onConflict:'day' })
-    if (section === 'photos') {
-      await doUpload(d); await loadPhotos(d)
-      setPhotos({ scale: null, food: null }); setPreviews({ scale: '', food: '' })
-    } else {
-      await supabase.from('habits').upsert({ day:d, omad:form.omad, meal_description:form.meal_description, steps:+form.steps,
-        meditate:form.meditate, meditate_start:form.meditate_start||null, meditate_end:form.meditate_end||null,
-        meditate_mins:+form.meditate_mins||null, sleep_hours:+form.sleep_hours, sleep_time:form.sleep_time||null,
-        wake_time:form.wake_time||null, zero_content:form.zero_content, manifest:form.manifest, water_liters:+form.water_liters,
-        yoga_sutras:form.yoga_sutras, zero_inbox:form.zero_inbox, workout:form.workout, workout_type:form.workout_type||null
-      }, { onConflict:'day' })
-    }
-    setSectionSaved(section); setTimeout(() => setSectionSaved(''), 2000)
-  }
-
-  const Toggle = ({ k, green }: { k:string, green?:boolean }) => (
-    <button className={`tg ${(form as any)[k] ? 'on' : 'off'} ${green ? 'tg-green' : ''}`}
-      onClick={() => f(k, !(form as any)[k])}><div className="k" /></button>
+  const Toggle = ({ k, green, onChange }: { k: string, green?: boolean, onChange?: () => void }) => (
+    <button className={`tg ${form[k] ? 'on' : 'off'} ${green ? 'tg-green' : ''}`}
+      onClick={() => { f(k, !form[k]); if (onChange) setTimeout(onChange, 100) }}><div className="k" /></button>
   )
 
-  const Row = ({ icon, iconBg, label, children, sub }: any) => (
-    <div className="row">
-      <div className="row-icon" style={{ background: iconBg }}>{icon}</div>
-      <div className="row-body">
-        <span className={sub ? 'row-sub' : 'row-label'}>{label}</span>
-        {children}
-      </div>
-    </div>
+  const ItemSave = ({ itemKey, onSave }: { itemKey: string, onSave: () => void }) => (
+    savedItems[itemKey] ? <span className="item-saved">✓</span> : <button className="item-save" onClick={onSave}>Save</button>
   )
 
-  const InputRow = ({ icon, iconBg, label, value, k, placeholder, type, color, sub, step }: any) => (
-    <div className="row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
-      <div style={{ display: 'flex', alignItems: 'center' }}>
-        <div className="row-icon" style={{ background: iconBg }}>{icon}</div>
-        <span className={sub ? 'row-sub' : 'row-label'}>{label}</span>
-      </div>
-      <input
-        type={type || 'text'}
-        inputMode={type === 'number' ? 'decimal' : undefined}
-        step={step}
-        value={value}
-        onChange={(e: any) => f(k, e.target.value)}
-        placeholder={placeholder || ''}
-        style={{
-          width: '100%', border: 'none', borderRadius: 8, padding: '10px 14px',
-          fontSize: 17, background: '#F2F2F7', fontFamily: 'inherit', color: color || '#000',
-          outline: 'none', WebkitAppearance: 'none',
-        }}
-      />
-    </div>
-  )
-
-  const TimeRow = ({ icon, iconBg, label, value, k, color, sub }: any) => (
-    <div className="row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 6 }}>
-      <div style={{ display: 'flex', alignItems: 'center' }}>
-        <div className="row-icon" style={{ background: iconBg }}>{icon}</div>
-        <span className={sub ? 'row-sub' : 'row-label'}>{label}</span>
-      </div>
-      <input
-        type="time"
-        value={value}
-        onChange={(e: any) => f(k, e.target.value)}
-        style={{
-          width: '100%', border: 'none', borderRadius: 8, padding: '10px 14px',
-          fontSize: 17, background: '#F2F2F7', fontFamily: 'inherit', color: color || '#000',
-          outline: 'none', WebkitAppearance: 'none',
-        }}
-      />
-    </div>
-  )
-
-  const SH = ({ title, section, color }: { title:string, section:string, color?:string }) => (
-    <div className="sh">
-      <span className="st" style={{ color: color || '#FF2D55' }}>{title}</span>
-      <button className="sec-save" onClick={() => saveSection(section)}>
-        {sectionSaved === section ? '✓ Saved' : 'Save'}
-      </button>
-    </div>
-  )
+  if (loading) return <p style={{ padding: 40, textAlign: 'center', color: '#8E8E93' }}>Loading...</p>
 
   const pk = 'rgba(255,45,85,0.12)'
   const gk = 'rgba(52,199,89,0.12)'
@@ -232,46 +170,43 @@ export default function AddPage() {
   const ok = 'rgba(255,149,0,0.12)'
 
   return (
-    <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-      <h1 style={{ fontSize:34, fontWeight:700, letterSpacing:'-0.03em' }}>Add</h1>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <h1 style={{ fontSize: 34, fontWeight: 700, letterSpacing: '-0.03em' }}>Add</h1>
 
       {/* Whoop */}
       <div className="card">
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'11px 16px' }}>
-          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-            <div className="row-icon" style={{ background:pk, fontSize:16 }}>⌚</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div className="row-icon" style={{ background: pk, fontSize: 16 }}>⌚</div>
             <div>
-              <p style={{ fontSize:15, fontWeight:500 }}>WHOOP</p>
-              <p style={{ fontSize:11, color:'#8E8E93' }}>{synced && syncFields.length > 0 ? `✓ ${syncFields.join(' · ')}` : 'Auto-fill from your band'}</p>
+              <p style={{ fontSize: 15, fontWeight: 500 }}>WHOOP</p>
+              <p style={{ fontSize: 11, color: '#8E8E93' }}>{syncFields.length > 0 ? `✓ ${syncFields.join(' · ')}` : 'Auto-fill from your band'}</p>
             </div>
           </div>
           {whoopOk === false ? (
-            <a href="/api/whoop/login" className="sync-btn" style={{ textDecoration:'none' }}>Connect</a>
+            <a href="/api/whoop/login" className="sync-btn" style={{ textDecoration: 'none' }}>Connect</a>
           ) : (
             <button onClick={syncWhoop} disabled={syncing} className="sync-btn">{syncing ? '...' : 'Sync'}</button>
           )}
         </div>
       </div>
 
-      {/* Day */}
+      {/* Day Selector */}
       <div className="card">
         <div className="day-sel">
-          <button className="day-btn" onClick={() => goDay(String(Math.max(1,(+form.day||1)-1)))}>‹</button>
-          <div style={{ flex:1, textAlign:'center' }}>
-            <input type="number" value={form.day} onChange={e => goDay(e.target.value)}
-              inputMode="numeric"
-              style={{ width:80, textAlign:'center', fontSize:22, fontWeight:700, border:'none', background:'transparent', fontFamily:'inherit', color:'#000', outline:'none', padding:0 }} min={1} max={100} />
-            <p style={{ fontSize:12, color:'#8E8E93', marginTop:2 }}>
-              {loading ? 'Loading...' : loadedDay ? `Editing · ${fmtDate(form.date)}` : form.day ? fmtDate(form.date) : ''}
-            </p>
+          <button className="day-btn" onClick={() => goDay(String(Math.max(1, (+form.day || 1) - 1)))}>‹</button>
+          <div style={{ flex: 1, textAlign: 'center' }}>
+            <input type="number" inputMode="numeric" value={form.day} onChange={e => goDay(e.target.value)}
+              style={{ width: 80, textAlign: 'center', fontSize: 22, fontWeight: 700, border: 'none', background: 'transparent', fontFamily: 'inherit', color: '#000', outline: 'none', padding: 0 }} min={1} max={100} />
+            <p style={{ fontSize: 12, color: '#8E8E93', marginTop: 2 }}>{form.date ? fmtDate(form.date) : ''}</p>
           </div>
-          <button className="day-btn" onClick={() => goDay(String(Math.min(100,(+form.day||0)+1)))}>›</button>
+          <button className="day-btn" onClick={() => goDay(String(Math.min(100, (+form.day || 0) + 1)))}>›</button>
         </div>
         {existingDays.length > 0 && (
-          <div style={{ padding:'0 16px 10px', display:'flex', flexWrap:'wrap', gap:4, borderTop:'0.5px solid rgba(60,60,67,0.12)', paddingTop:10 }}>
+          <div style={{ padding: '0 16px 10px', display: 'flex', flexWrap: 'wrap', gap: 4, borderTop: '0.5px solid rgba(60,60,67,0.12)', paddingTop: 10 }}>
             {existingDays.map(d => (
               <button key={d} onClick={() => goDay(String(d))} style={{
-                padding:'3px 9px', borderRadius:6, fontSize:12, fontWeight:600, border:'none', cursor:'pointer', fontFamily:'inherit',
+                padding: '3px 9px', borderRadius: 6, fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
                 background: +form.day === d ? '#FF2D55' : '#F2F2F7', color: +form.day === d ? '#fff' : '#8E8E93',
               }}>{d}</button>
             ))}
@@ -279,95 +214,145 @@ export default function AddPage() {
         )}
       </div>
 
-      {/* Basics */}
+      {/* Weight */}
       <p className="gh">Basics</p>
       <div className="card">
-        <SH title="Weight & date" section="basics" color="#FF9500" />
-        <InputRow icon="⚖️" iconBg={ok} label="Weight" value={form.weight} k="weight" placeholder="Enter weight in kg" color="#FF9500" type="number" step="0.01" />
-        <div className="row">
-          <div className="row-icon" style={{ background:'rgba(0,122,255,0.12)' }}>📅</div>
-          <div className="row-body">
-            <span className="row-label">Date</span>
-            <span style={{ fontSize:15, color:'#8E8E93' }}>{fmtDate(form.date)}</span>
+        <div className="row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <div className="row-icon" style={{ background: ok }}>⚖️</div>
+              <span className="row-label">Weight (kg)</span>
+            </div>
+            <ItemSave itemKey="weight" onSave={saveWeight} />
           </div>
+          <input className="field-input" type="number" inputMode="decimal" step="0.01" value={form.weight}
+            onChange={e => f('weight', e.target.value)} placeholder="Enter weight in kg" />
         </div>
       </div>
 
       {/* Photos */}
       <p className="gh">Photos</p>
       <div className="card">
-        <SH title="Daily photos" section="photos" color="#8E8E93" />
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:10, padding:'10px 16px 14px' }}>
-          {PHOTO_TYPES.map(({key, label, icon}) => (
-            <label key={key} style={{ cursor:'pointer', display:'block' }}>
-              <div className="photo-box" style={{
-                border: previews[key] ? '2px solid #34C759' : existing[key] ? '2px solid #34C75966' : '1.5px dashed #D1D1D6',
-              }}>
-                {(previews[key] || existing[key]) ? (
-                  <img src={previews[key] || existing[key]} alt={label} />
-                ) : (
-                  <><span style={{ fontSize:28 }}>{icon}</span><span style={{ fontSize:11, color:'#8E8E93', marginTop:4, fontWeight:500 }}>{label}</span></>
-                )}
+        <div className="photo-grid">
+          {[{ k: 'scale', l: 'Scale', i: '⚖️', empty: 'No weight photo' }, { k: 'food', l: 'Meal', i: '🍽️', empty: 'No meal photo' }].map(({ k, l, i, empty }) => (
+            <div key={k}>
+              <label style={{ cursor: 'pointer', display: 'block' }}>
+                <div className="photo-box" style={{ border: previews[k] ? '2px solid #34C759' : existing[k] ? '2px solid #34C75966' : '1.5px dashed #D1D1D6' }}>
+                  {(previews[k] || existing[k]) ? (
+                    <img src={previews[k] || existing[k]} alt={l} />
+                  ) : (
+                    <><span style={{ fontSize: 24 }}>{i}</span><span style={{ fontSize: 11, color: '#8E8E93', marginTop: 4 }}>{empty}</span></>
+                  )}
+                </div>
+                <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => pickPhoto(k, e.target.files?.[0] || null)} />
+              </label>
+              <div style={{ display: 'flex', justifyContent: 'center', marginTop: 4 }}>
+                {(previews[k] || photos[k]) && <ItemSave itemKey={`photo-${k}`} onSave={() => savePhoto(k)} />}
               </div>
-              <input type="file" accept="image/*" style={{ display:'none' }}
-                onChange={e => pickPhoto(key, e.target.files?.[0] || null)} />
-            </label>
+            </div>
           ))}
         </div>
       </div>
 
-      {/* Non-Negotiables */}
-      <p className="gh">Non-negotiables</p>
+      {/* Must Haves */}
+      <p className="gh">Must Have&apos;s</p>
       <div className="card">
-        <SH title="5 must-do habits" section="non-neg" />
-        <Row icon="🍽️" iconBg={pk} label="OMAD"><Toggle k="omad" /></Row>
+        <div className="row">
+          <div className="row-icon" style={{ background: pk }}>🍽️</div>
+          <div className="row-body">
+            <span className="row-label">OMAD</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <ItemSave itemKey="omad" onSave={() => saveItem({ omad: form.omad, full_fast_day: form.full_fast_day, meal_description: form.meal_description }, 'omad')} />
+              <Toggle k="omad" />
+            </div>
+          </div>
+        </div>
         {form.omad && (
-          <div style={{ padding:'0 16px 10px' }}>
+          <div style={{ padding: '0 16px 10px' }}>
             <textarea className="notes-input" rows={2} value={form.meal_description} onChange={e => f('meal_description', e.target.value)} placeholder="What did you eat?" />
           </div>
         )}
-        <InputRow icon="🚶" iconBg={pk} label="Steps" value={form.steps} k="steps" placeholder="Enter step count" color="#FF2D55" type="number" />
-        <Row icon="🧘" iconBg={pk} label="Meditate"><Toggle k="meditate" /></Row>
-        {form.meditate && (
-          <>
-            <InputRow icon="🧘" iconBg={pp} label="Duration (mins)" value={form.meditate_mins} k="meditate_mins" placeholder="Enter minutes" color="#FF2D55" sub type="number" />
-            <TimeRow icon="🧘" iconBg={pp} label="Start time" value={form.meditate_start} k="meditate_start" color="#FF2D55" sub />
-            <TimeRow icon="🧘" iconBg={pp} label="End time" value={form.meditate_end} k="meditate_end" color="#FF2D55" sub />
-          </>
-        )}
-        <InputRow icon="😴" iconBg={pk} label="Sleep hours" value={form.sleep_hours} k="sleep_hours" placeholder="Enter hours slept" color="#FF2D55" type="number" step="0.1" />
-        <TimeRow icon="🌙" iconBg={pp} label="Bedtime" value={form.sleep_time} k="sleep_time" color="#FF2D55" sub />
-        <TimeRow icon="☀️" iconBg={ok} label="Wake time" value={form.wake_time} k="wake_time" color="#FF2D55" sub />
-        <Row icon="📵" iconBg={pk} label="Zero content"><Toggle k="zero_content" /></Row>
+        <div className="row">
+          <div className="row-icon" style={{ background: pp }}>🚫</div>
+          <div className="row-body">
+            <span className="row-sub">Full fast day (no food)</span>
+            <Toggle k="full_fast_day" />
+          </div>
+        </div>
+
+        <div className="row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <div className="row-icon" style={{ background: pk }}>🚶</div>
+              <span className="row-label">Steps</span>
+            </div>
+            <ItemSave itemKey="steps" onSave={() => saveItem({ steps: +form.steps }, 'steps')} />
+          </div>
+          <input className="field-input" type="number" inputMode="numeric" value={form.steps}
+            onChange={e => f('steps', e.target.value)} placeholder="Enter step count" />
+        </div>
+
+        <div className="row">
+          <div className="row-icon" style={{ background: pk }}>🕓</div>
+          <div className="row-body">
+            <span className="row-label">Fast post 4pm</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <ItemSave itemKey="fast4pm" onSave={() => saveItem({ fast_post_4pm: form.fast_post_4pm }, 'fast4pm')} />
+              <Toggle k="fast_post_4pm" />
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Best Effort */}
-      <p className="gh">Best effort</p>
+      {/* Bonus */}
+      <p className="gh">Bonus Habits</p>
       <div className="card">
-        <SH title="5 bonus habits" section="best-effort" color="#34C759" />
-        <Row icon="✨" iconBg={gk} label="Manifest"><Toggle k="manifest" green /></Row>
-        <InputRow icon="💧" iconBg={gk} label="Water (litres)" value={form.water_liters} k="water_liters" placeholder="Enter litres" color="#34C759" type="number" step="0.1" />
-        <Row icon="📖" iconBg={gk} label="Yoga Sutras"><Toggle k="yoga_sutras" green /></Row>
-        <Row icon="📬" iconBg={gk} label="Zero inbox"><Toggle k="zero_inbox" green /></Row>
-        <Row icon="💪" iconBg={gk} label="Workout"><Toggle k="workout" green /></Row>
-        {form.workout && (
-          <InputRow icon="🏊" iconBg={gk} label="Workout type" value={form.workout_type} k="workout_type" placeholder="e.g. Swimming, Running" color="#34C759" sub />
+        <div className="row"><div className="row-icon" style={{ background: gk }}>🧘</div><div className="row-body"><span className="row-label">Meditate</span><div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><ItemSave itemKey="meditate" onSave={() => saveItem({ meditate: form.meditate, meditate_mins: +form.meditate_mins || null }, 'meditate')} /><Toggle k="meditate" green /></div></div></div>
+        {form.meditate && (
+          <div style={{ padding: '0 16px 10px' }}>
+            <input className="field-input" type="number" inputMode="numeric" value={form.meditate_mins} onChange={e => f('meditate_mins', e.target.value)} placeholder="Duration in minutes" />
+          </div>
         )}
+
+        <div className="row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center' }}><div className="row-icon" style={{ background: gk }}>😴</div><span className="row-label">Sleep</span></div>
+            <ItemSave itemKey="sleep" onSave={() => saveItem({ sleep_hours: +form.sleep_hours, sleep_time: form.sleep_time || null, wake_time: form.wake_time || null }, 'sleep')} />
+          </div>
+          <input className="field-input" type="number" inputMode="decimal" step="0.1" value={form.sleep_hours} onChange={e => f('sleep_hours', e.target.value)} placeholder="Hours slept" />
+        </div>
+
+        <div className="row"><div className="row-icon" style={{ background: gk }}>📵</div><div className="row-body"><span className="row-label">Zero content</span><div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><ItemSave itemKey="zc" onSave={() => saveItem({ zero_content: form.zero_content }, 'zc')} /><Toggle k="zero_content" green /></div></div></div>
+        <div className="row"><div className="row-icon" style={{ background: gk }}>✨</div><div className="row-body"><span className="row-label">Manifest</span><div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><ItemSave itemKey="manifest" onSave={() => saveItem({ manifest: form.manifest }, 'manifest')} /><Toggle k="manifest" green /></div></div></div>
+
+        <div className="row" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center' }}><div className="row-icon" style={{ background: gk }}>💧</div><span className="row-label">Water (litres)</span></div>
+            <ItemSave itemKey="water" onSave={() => saveItem({ water_liters: +form.water_liters }, 'water')} />
+          </div>
+          <input className="field-input" type="number" inputMode="decimal" step="0.1" value={form.water_liters} onChange={e => f('water_liters', e.target.value)} placeholder="Litres of water" />
+        </div>
+
+        <div className="row"><div className="row-icon" style={{ background: gk }}>💪</div><div className="row-body"><span className="row-label">Workout</span><div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><ItemSave itemKey="workout" onSave={() => saveItem({ workout: form.workout, workout_type: form.workout_type || null }, 'workout')} /><Toggle k="workout" green /></div></div></div>
+        {form.workout && (
+          <div style={{ padding: '0 16px 10px' }}>
+            <input className="field-input" type="text" value={form.workout_type} onChange={e => f('workout_type', e.target.value)} placeholder="e.g. Swimming, Padel, Gym" />
+          </div>
+        )}
+
+        <div className="row"><div className="row-icon" style={{ background: gk }}>📬</div><div className="row-body"><span className="row-label">Zero inbox</span><div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><ItemSave itemKey="inbox" onSave={() => saveItem({ zero_inbox: form.zero_inbox }, 'inbox')} /><Toggle k="zero_inbox" green /></div></div></div>
+        <div className="row"><div className="row-icon" style={{ background: gk }}>📖</div><div className="row-body"><span className="row-label">Yoga Sutras</span><div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><ItemSave itemKey="sutras" onSave={() => saveItem({ yoga_sutras: form.yoga_sutras }, 'sutras')} /><Toggle k="yoga_sutras" green /></div></div></div>
       </div>
 
       {/* Notes */}
       <p className="gh">Notes</p>
-      <div className="card">
-        <SH title="How are you feeling?" section="notes" color="#8E8E93" />
-        <div style={{ padding:'0 16px 12px' }}>
-          <textarea className="notes-input" rows={3} value={form.notes} onChange={e => f('notes', e.target.value)} placeholder="Write something..." />
+      <div className="card" style={{ padding: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <span style={{ fontSize: 15, fontWeight: 600 }}>How are you feeling?</span>
+          <ItemSave itemKey="notes" onSave={() => { supabase.from('daily_logs').upsert({ day: +form.day, date: form.date, attempt_id: attemptId, notes: form.notes, weight: +form.weight || 0 }, { onConflict: 'day,attempt_id' } as any); setSavedItems(p => ({ ...p, notes: true })); setTimeout(() => setSavedItems(p => ({ ...p, notes: false })), 2000) }} />
         </div>
+        <textarea className="notes-input" rows={3} value={form.notes} onChange={e => f('notes', e.target.value)} placeholder="Write something..." />
       </div>
-
-      <button onClick={saveAll} disabled={saving || uploading} className="save-all"
-        style={{ marginTop:4, opacity:(saving||uploading)?0.5:1 }}>
-        {uploading ? 'Uploading...' : saving ? 'Saving...' : saved ? '✓ Day Saved!' : `Save Day ${form.day}`}
-      </button>
     </div>
   )
 }
