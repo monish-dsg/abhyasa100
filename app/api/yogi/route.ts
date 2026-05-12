@@ -83,24 +83,56 @@ export async function POST(req: Request) {
     const dayNum = getDayNumber(startDate)
     const today = new Date().toISOString().split('T')[0]
 
-    // Fetch data directly from database — don't rely on frontend
-    const { data: logs } = await supabase.from('daily_logs').select('*').eq('attempt_id', attemptId).order('day')
-    const { data: habits } = await supabase.from('habits').select('*').eq('attempt_id', attemptId).order('day')
+    // Fetch data directly from database — try with attempt_id, fallback without
+    let logs: any[] = []
+    let habits: any[] = []
+    
+    const { data: logsData } = await supabase.from('daily_logs').select('*').eq('attempt_id', attemptId).order('day')
+    logs = logsData || []
+    
+    // If no logs found with attempt_id, try without filter (data might have default attempt_id)
+    if (logs.length === 0) {
+      const { data: allLogs } = await supabase.from('daily_logs').select('*').order('day')
+      logs = allLogs || []
+    }
+
+    const { data: habitsData } = await supabase.from('habits').select('*').eq('attempt_id', attemptId).order('day')
+    habits = habitsData || []
+    
+    // If no habits found with attempt_id, try without filter
+    if (habits.length === 0) {
+      const { data: allHabits } = await supabase.from('habits').select('*').order('day')
+      habits = allHabits || []
+    }
 
     // Build detailed summary from database
-    const summary = (logs || []).map((l: any) => {
-      const h = (habits || []).find((hab: any) => hab.day === l.day)
-      return `Day ${l.day} (${l.date}): Weight ${l.weight || '?'}kg, ${l.color || 'unscored'}, Score ${l.score || 0}/11` +
-        (h ? ` | OMAD:${h.omad?'YES':'NO'} FullFast:${h.full_fast_day?'YES':'NO'} Steps:${h.steps||0} Fast4pm:${h.fast_post_4pm?'YES':'NO'} Meditate:${h.meditate?'YES':'NO'}(${h.meditate_mins||0}min) Sleep:${h.sleep_hours||'?'}hrs ZeroContent:${h.zero_content?'YES':'NO'} Manifest:${h.manifest?'YES':'NO'} Water:${h.water_liters||0}L Workout:${h.workout?'YES':'NO'}(${h.workout_type||''}) ZeroInbox:${h.zero_inbox?'YES':'NO'} YogaSutras:${h.yoga_sutras?'YES':'NO'} Meal:${h.meal_description||'not logged'} Protein:${h.protein_pct||'?'}% Fat:${h.fat_pct||'?'}% Carbs:${h.carbs_pct||'?'}%` : ' | No habits logged')
-    }).join('\n')
+    const summary = logs.map((l: any) => {
+      const h = habits.find((hab: any) => hab.day === l.day)
+      return `Day ${l.day} (${l.date}): Weight ${l.weight || '?'}kg, Color: ${l.color || 'unscored'}, Score: ${l.score || 0}/11` +
+        (h ? `
+  OMAD: ${h.omad ? 'YES' : 'NO'}
+  Full Fast Day: ${h.full_fast_day ? 'YES' : 'NO'}
+  Steps: ${h.steps || 0}
+  Fast Post 4pm: ${h.fast_post_4pm ? 'YES' : 'NO'}
+  Meditate: ${h.meditate ? 'YES' : 'NO'} (${h.meditate_mins || 0} mins)
+  Sleep: ${h.sleep_hours || '?'} hours
+  Zero Content: ${h.zero_content ? 'YES' : 'NO'}
+  Manifest: ${h.manifest ? 'YES' : 'NO'}
+  Water: ${h.water_liters || 0}L
+  Workout: ${h.workout ? 'YES' : 'NO'} ${h.workout_type ? '(' + h.workout_type + ')' : ''}
+  Zero Inbox: ${h.zero_inbox ? 'YES' : 'NO'}
+  Yoga Sutras: ${h.yoga_sutras ? 'YES' : 'NO'}
+  Meal: ${h.meal_description || 'not logged'}
+  Macros: Protein ${h.protein_pct || '?'}% / Fat ${h.fat_pct || '?'}% / Carbs ${h.carbs_pct || '?'}%` : '\n  No habit details logged for this day')
+    }).join('\n\n')
 
     // Calculate stats for Yogi
-    const totalDays = (logs || []).length
-    const perfectDays = (logs || []).filter((l: any) => l.color === 'Perfect').length
-    const solidDays = (logs || []).filter((l: any) => l.color === 'Solid').length
-    const slippedDays = (logs || []).filter((l: any) => l.color === 'Slipped').length
-    const missedDays = (logs || []).filter((l: any) => l.color === 'Missed').length
-    const weights = (logs || []).filter((l: any) => l.weight > 0).map((l: any) => ({ day: l.day, weight: l.weight }))
+    const totalDays = logs.length
+    const perfectDays = logs.filter((l: any) => l.color === 'Perfect').length
+    const solidDays = logs.filter((l: any) => l.color === 'Solid').length
+    const slippedDays = logs.filter((l: any) => l.color === 'Slipped').length
+    const missedDays = logs.filter((l: any) => l.color === 'Missed').length
+    const weights = logs.filter((l: any) => l.weight > 0).map((l: any) => ({ day: l.day, weight: l.weight }))
     const latestWeight = weights.length > 0 ? weights[weights.length - 1].weight : null
     const startWeight = weights.length > 0 ? weights[0].weight : null
 
@@ -110,7 +142,9 @@ STATISTICS:
 - Perfect: ${perfectDays} | Solid: ${solidDays} | Slipped: ${slippedDays} | Missed: ${missedDays}
 - Start weight: ${startWeight || 'not logged'}kg | Current weight: ${latestWeight || 'not logged'}kg | Target: 66kg
 - Weight lost: ${startWeight && latestWeight ? (startWeight - latestWeight).toFixed(1) : '?'}kg
-${weights.length >= 2 ? `- Weight trend: ${weights.map(w => `D${w.day}:${w.weight}`).join(' → ')}` : ''}`
+${weights.length >= 2 ? `- Weight trend: ${weights.map(w => `D${w.day}:${w.weight}`).join(' → ')}` : ''}
+- Habits records found: ${habits.length}
+- Daily logs found: ${logs.length}`
 
     // Calculate target date
     const endDate = new Date(startDate + 'T00:00:00')
