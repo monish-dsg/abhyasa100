@@ -98,7 +98,25 @@ export default function AddPage() {
     setSavedItems(alreadySaved)
   }
 
-  const f = (k: string, v: any) => setForm((p: any) => ({ ...p, [k]: v }))
+  // Map form fields to their save item keys
+  const fieldToSaveKey: Record<string, string> = {
+    weight: 'weight', omad: 'omad', full_fast_day: 'omad', meal_description: 'omad',
+    steps: 'steps', fast_post_4pm: 'fast4pm',
+    meditate: 'meditate', meditate_mins: 'meditate', meditate_start: 'meditate', meditate_end: 'meditate',
+    sleep_hours: 'sleep', sleep_time: 'sleep', wake_time: 'sleep',
+    zero_content: 'zc', manifest: 'manifest', water_liters: 'water',
+    workout: 'workout', workout_type: 'workout', zero_inbox: 'inbox', yoga_sutras: 'sutras',
+    notes: 'notes'
+  }
+
+  const f = (k: string, v: any) => {
+    setForm((p: any) => ({ ...p, [k]: v }))
+    // Clear saved state so Save button reappears for editing
+    const saveKey = fieldToSaveKey[k]
+    if (saveKey && savedItems[saveKey]) {
+      setSavedItems(p => ({ ...p, [saveKey]: false }))
+    }
+  }
   const goDay = (v: string) => { f('day', v); const n = parseInt(v); if (n >= 1 && n <= 100) { f('date', dayDate(startDate, n)); loadDay(n) } }
 
   // Save individual item
