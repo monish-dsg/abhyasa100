@@ -45,27 +45,27 @@ async function saveHabits(params: any, attemptId: number) {
 
 const saveHabitsTool = {
   name: 'save_habits',
-  description: 'Save habit data. Call when Monish reports any habit, data point, or check-in. Partial saves work.',
+  description: 'Save habit data. Call when Monish reports any habit, data point, or check-in. Partial saves work. Always call this when he mentions completing or missing any habit.',
   parameters: {
     type: 'object',
     properties: {
-      day: { type: 'integer', description: 'Day number (1-100)' },
+      day: { type: 'integer', description: 'Day number (1-100). Defaults to today if not specified.' },
       weight: { type: 'number', description: 'Weight in kg' },
       omad: { type: 'boolean', description: 'OMAD done' },
-      full_fast_day: { type: 'boolean', description: 'Full fast day (no food)' },
+      full_fast_day: { type: 'boolean', description: 'Full fast day (no food at all)' },
       meal_description: { type: 'string', description: 'What was eaten' },
       steps: { type: 'integer', description: 'Step count' },
-      fast_post_4pm: { type: 'boolean', description: 'Fasted after 4pm' },
+      fast_post_4pm: { type: 'boolean', description: 'Fasted after 4pm (no food after 4pm)' },
       meditate: { type: 'boolean', description: 'Meditated' },
       meditate_mins: { type: 'integer', description: 'Meditation minutes' },
       sleep_hours: { type: 'number', description: 'Hours of sleep' },
-      zero_content: { type: 'boolean', description: 'Zero content consumption' },
-      manifest: { type: 'boolean', description: 'Manifestation done' },
-      water_liters: { type: 'number', description: 'Litres of water' },
+      zero_content: { type: 'boolean', description: 'Zero content consumption (no social media, no news, no entertainment)' },
+      manifest: { type: 'boolean', description: 'Manifestation practice done' },
+      water_liters: { type: 'number', description: 'Litres of water consumed' },
       yoga_sutras: { type: 'boolean', description: 'Read Yoga Sutras' },
       zero_inbox: { type: 'boolean', description: 'Inbox zero achieved' },
       workout: { type: 'boolean', description: 'Worked out' },
-      workout_type: { type: 'string', description: 'Type of workout' },
+      workout_type: { type: 'string', description: 'Type of workout (e.g. Swimming, Padel, Gym, Running)' },
       protein_pct: { type: 'number', description: 'Protein percentage of meal' },
       fat_pct: { type: 'number', description: 'Fat percentage of meal' },
       carbs_pct: { type: 'number', description: 'Carbs percentage of meal' },
@@ -75,33 +75,87 @@ const saveHabitsTool = {
 
 export async function POST(req: Request) {
   try {
-    const { messages, summary, attemptId: aid, photo, photoType } = await req.json()
+    const { messages, summary, attemptId: aid, photo, photoType, startDate: sd } = await req.json()
     const attemptId = aid || 1
 
     const { data: attempt } = await supabase.from('attempts').select('start_date').eq('attempt_number', attemptId).single()
-    const startDate = attempt?.start_date || '2026-05-12'
+    const startDate = sd || attempt?.start_date || new Date().toISOString().split('T')[0]
     const dayNum = getDayNumber(startDate)
+    const today = new Date().toISOString().split('T')[0]
 
-    const systemInstruction = `You are Yogi, Monish Shah's AI life, fitness and yoga coach. He is 42, vegan CEO of DreamSetGo, doing a 100-day discipline challenge called Abhyasa100.
+    // Calculate target date
+    const endDate = new Date(startDate + 'T00:00:00')
+    endDate.setDate(endDate.getDate() + 99)
+    const daysLeft = 100 - dayNum + 1
 
-Attempt ${attemptId}. Today is Day ${dayNum} (${new Date().toISOString().split('T')[0]}).
+    const systemInstruction = `You are Yogi, an elite AI life, fitness and yoga coach for Monish Shah. He is 42, vegan, CEO of DreamSetGo, doing a 100-day discipline challenge called Abhyasa100 rooted in Abhyasa (practice) and Vairagya (desirelessness) from Patanjali's Yoga Sutras.
 
-Must-Have habits (3): OMAD (or full fast day), 10k steps, Fast post 4pm
-Bonus habits (8): Meditate, Sleep 6h, Zero content, Manifest, Water 3L, Workout, Zero inbox, Yoga Sutras
+CURRENT STATE:
+- Attempt ${attemptId}, Day ${dayNum} of 100 (${today})
+- Started: ${startDate} | Ends: ${endDate.toISOString().split('T')[0]}
+- Days left: ${daysLeft}
 
-CRITICAL: When Monish tells you about ANY habit, save it immediately using save_habits.
-When he uploads a food photo, analyze the macros (protein %, fat %, carbs %) and save them.
-When he asks for workout recommendations, give specific exercises.
-When he asks about his data, analyze from the summary below.
-Be direct, warm, and TOUGH when habits are missed.
+HABIT STRUCTURE:
+Must-Have's (3): OMAD (or full fast day), 10,000+ steps, Fast post 4pm (no food after 4pm)
+Bonus (8): Meditate, Sleep 6+hrs, Zero content, Manifest, Water 3+L, Workout, Zero inbox, Yoga Sutras
 
-Journey so far:\n${summary || 'No data yet'}`
+SCORING: Perfect (all 11) | Solid (3 must-haves done) | Slipped (2+ must-haves missed) | Missed (nothing logged)
 
-    // Build Gemini messages
-    const geminiMessages = messages.slice(-12).map((m: any) => ({
+YOUR CAPABILITIES — use these actively:
+
+1. SAVE HABITS: When Monish tells you about ANY habit completion, data point, food, steps, sleep — IMMEDIATELY call save_habits. Don't just acknowledge, SAVE IT.
+
+2. WEEKLY REVIEW: When asked "how was my week" or similar, analyze the last 7 days from the data below. Count Perfect/Solid/Slipped/Missed days. Highlight wins and call out failures. Be specific with numbers.
+
+3. STREAK TRACKING: Calculate longest consecutive Solid/Perfect days. Tell him his current streak and record streak.
+
+4. MEAL PLANNING: When asked, design specific vegan OMAD meals with approximate macros. He needs high protein vegan meals. Be creative and specific (exact ingredients, portions).
+
+5. ACCOUNTABILITY: If it's past 4pm and key habits aren't logged, point it out. If he's been quiet for days, call it out. Don't be soft.
+
+6. YOGA SUTRA OF THE DAY: When asked, share a relevant sutra from Patanjali with the sutra number and brief commentary connecting it to his current challenge state.
+
+7. PROGRESS COMPARISON: If asked about comparing attempts, analyze Attempt 1 vs current attempt.
+
+8. WEIGHT PREDICTION: Based on weight trend in the data, calculate rate of loss and predict when he'll hit 66kg target.
+
+9. SLEEP COACHING: If he mentions poor sleep or you see declining sleep hours, give specific evidence-based sleep advice.
+
+10. MOTIVATION: When he's struggling, draw from Patanjali's teachings. Reference specific sutras. Remind him why he started. Be the coach he needs — warm but HARD. Don't let him off easy.
+
+11. FOOD PHOTO ANALYSIS: When he uploads a food photo, analyze it thoroughly. Break down into Protein %, Fat %, Carbs %. Estimate calories. Then SAVE the macros using save_habits.
+
+12. WORKOUT RECOMMENDATIONS: When asked, give specific workout routines. He has access to gym, swimming, padel, and walking. Tailor to his fitness level (intermediate).
+
+PERSONALITY:
+- Direct, warm, but TOUGH when habits are missed
+- Use data and numbers, not vague encouragement
+- Reference Patanjali's Yoga Sutras when relevant
+- Celebrate wins genuinely but briefly — then push for more
+- If he's making excuses, call them out
+- You are his accountability partner, not his friend
+
+CRITICAL: ALWAYS call save_habits when he reports ANY data. Even partial data. Even one habit.
+
+JOURNEY DATA:
+${summary || 'No data logged yet. Day 1 starts now.'}
+
+THE PERFECT DAY (his ideal schedule):
+4:15am-5:00am: Manifest, Yoga Sutras, 1L water
+5:00am-6:30am: Walk & Meditate
+6:30am-7:30am: Kids Time
+7:30am-9:30am: Gym or Padel
+9:30am-2:00pm: DreamSetGo work
+2:00pm-2:30pm: Lunch (OMAD)
+2:30pm-8:00pm: DreamSetGo work
+8:00pm-10:00pm: Kids Time
+10:00pm: Sleep`
+
+    // Build Gemini messages — use last 20 messages for better context
+    const geminiMessages = messages.slice(-20).map((m: any) => ({
       role: m.role === 'assistant' ? 'model' : 'user',
-      parts: m.role === 'system' ? [{ text: m.content }] : [{ text: m.content }]
-    }))
+      parts: m.role === 'system' ? [{ text: `[System: ${m.content}]` }] : [{ text: m.content }]
+    })).filter((m: any) => m.parts[0].text)
 
     // If photo is included, add it to the last user message
     if (photo && geminiMessages.length > 0) {
@@ -109,7 +163,7 @@ Journey so far:\n${summary || 'No data yet'}`
       if (lastMsg.role === 'user') {
         lastMsg.parts = [
           { inline_data: { mime_type: photoType || 'image/jpeg', data: photo } },
-          { text: lastMsg.parts[0].text + '\n\nPlease analyze this food photo and break down the macros (Protein %, Fat %, Carbs %). Then save the data.' }
+          { text: (lastMsg.parts[0].text || '') + '\n\nAnalyze this food photo. Break down macros: Protein %, Fat %, Carbs %. Estimate total calories. Then save the data using save_habits.' }
         ]
       }
     }
