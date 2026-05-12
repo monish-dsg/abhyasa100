@@ -1,118 +1,229 @@
-'use client'
-import { useState, useEffect, useRef } from 'react'
-import { supabase } from '../../lib/supabase'
+import { NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 
-export default function YogiChat() {
-  const [messages, setMessages] = useState<any[]>([{ role: 'assistant', content: '🙏 Namaste Monish. I am Yogi — your coach powered by Gemini.\n\nI can:\n• Track your habits — just tell me what you did\n• Analyze food photos — upload and I\'ll break down macros\n• Recommend workouts\n• Answer questions about your data\n\nWhat can I help with today?' }])
-  const [input, setInput] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [photo, setPhoto] = useState<File | null>(null)
-  const [photoPreview, setPhotoPreview] = useState('')
-  const [attemptId, setAttemptId] = useState(1)
-  const bottom = useRef<HTMLDivElement>(null)
-  const fileRef = useRef<HTMLInputElement>(null)
+export const maxDuration = 30
 
-  useEffect(() => {
-    supabase.from('attempts').select('*').eq('status', 'active').order('attempt_number', { ascending: false }).limit(1).then(({ data }) => {
-      setAttemptId(data?.[0]?.attempt_number || 1)
-    })
-  }, [])
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
 
-  useEffect(() => { bottom.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
+function getDayNumber(startDate: string): number {
+  return Math.max(1, Math.floor((new Date().getTime() - new Date(startDate + 'T00:00:00').getTime()) / 864e5) + 1)
+}
 
-  const send = async () => {
-    if (!input.trim() && !photo) return
-    const userContent = input.trim()
-    const userMsg: any = { role: 'user', content: userContent || '📷 Photo uploaded' }
-    setMessages(p => [...p, userMsg]); setInput(''); setLoading(true)
+function getColor(h: any) {
+  const mustHaves = [h.omad || h.full_fast_day, (h.steps || 0) >= 10000, h.fast_post_4pm]
+  const missedMust = mustHaves.filter((v: boolean) => !v).length
+  const bonus = [h.meditate, (h.sleep_hours || 0) >= 6, h.zero_content, h.manifest, (h.water_liters || 0) >= 3, h.workout, h.zero_inbox, h.yoga_sutras]
+  const bonusDone = bonus.filter(Boolean).length
+  if (missedMust === 0 && bonusDone === 8) return { color: 'Perfect', score: 11 }
+  if (missedMust === 0) return { color: 'Solid', score: 3 + bonusDone }
+  if (missedMust >= 2) return { color: 'Slipped', score: Math.max(0, 3 - missedMust) + bonusDone }
+  return { color: 'Solid', score: 2 + bonusDone }
+}
 
-    try {
-      // Get context
-      const { data: logs } = await supabase.from('daily_logs').select('*').eq('attempt_id', attemptId).order('day')
-      const { data: habits } = await supabase.from('habits').select('*').eq('attempt_id', attemptId).order('day')
-      const summary = (logs || []).map((l: any) => `Day ${l.day}: ${l.weight || '?'}kg, ${l.color}, ${l.score}/11`).join('\n')
+async function saveHabits(params: any, attemptId: number) {
+  const { data: attempt } = await supabase.from('attempts').select('start_date').eq('attempt_number', attemptId).single()
+  const startDate = attempt?.start_date || new Date().toISOString().split('T')[0]
+  const day = params.day || getDayNumber(startDate)
+  const date = params.date || new Date().toISOString().split('T')[0]
 
-      const body: any = { messages: [...messages, userMsg], summary, attemptId }
+  await supabase.from('daily_logs').upsert({ day, date, attempt_id: attemptId, weight: params.weight || 0 }, { onConflict: 'day,attempt_id' } as any)
 
-      // If photo, convert to base64
-      if (photo) {
-        const reader = new FileReader()
-        const base64 = await new Promise<string>((res) => {
-          reader.onload = () => res((reader.result as string).split(',')[1])
-          reader.readAsDataURL(photo)
-        })
-        body.photo = base64
-        body.photoType = photo.type
+  const { data: existing } = await supabase.from('habits').select('*').eq('day', day).eq('attempt_id', attemptId).single()
+  const habitData: any = { day, attempt_id: attemptId, ...existing }
+
+  const fields = ['omad', 'full_fast_day', 'steps', 'fast_post_4pm', 'meditate', 'meditate_mins', 'sleep_hours', 'sleep_time', 'wake_time', 'zero_content', 'manifest', 'water_liters', 'yoga_sutras', 'zero_inbox', 'workout', 'workout_type', 'meal_description', 'protein_pct', 'fat_pct', 'carbs_pct']
+  fields.forEach(f => { if (params[f] !== undefined) habitData[f] = params[f] })
+
+  await supabase.from('habits').upsert(habitData, { onConflict: 'day,attempt_id' } as any)
+
+  const { data: h } = await supabase.from('habits').select('*').eq('day', day).eq('attempt_id', attemptId).single()
+  const { color, score } = getColor(h || {})
+  await supabase.from('daily_logs').update({ color, score }).eq('day', day).eq('attempt_id', attemptId)
+
+  return { success: true, day, color, score, saved_fields: Object.keys(params).filter(k => k !== 'day' && k !== 'date') }
+}
+
+const saveHabitsTool = {
+  name: 'save_habits',
+  description: 'Save habit data. Call when Monish reports any habit, data point, or check-in. Partial saves work. Always call this when he mentions completing or missing any habit.',
+  parameters: {
+    type: 'object',
+    properties: {
+      day: { type: 'integer', description: 'Day number (1-100). Defaults to today if not specified.' },
+      weight: { type: 'number', description: 'Weight in kg' },
+      omad: { type: 'boolean', description: 'OMAD done' },
+      full_fast_day: { type: 'boolean', description: 'Full fast day (no food at all)' },
+      meal_description: { type: 'string', description: 'What was eaten' },
+      steps: { type: 'integer', description: 'Step count' },
+      fast_post_4pm: { type: 'boolean', description: 'Fasted after 4pm (no food after 4pm)' },
+      meditate: { type: 'boolean', description: 'Meditated' },
+      meditate_mins: { type: 'integer', description: 'Meditation minutes' },
+      sleep_hours: { type: 'number', description: 'Hours of sleep' },
+      zero_content: { type: 'boolean', description: 'Zero content consumption (no social media, no news, no entertainment)' },
+      manifest: { type: 'boolean', description: 'Manifestation practice done' },
+      water_liters: { type: 'number', description: 'Litres of water consumed' },
+      yoga_sutras: { type: 'boolean', description: 'Read Yoga Sutras' },
+      zero_inbox: { type: 'boolean', description: 'Inbox zero achieved' },
+      workout: { type: 'boolean', description: 'Worked out' },
+      workout_type: { type: 'string', description: 'Type of workout (e.g. Swimming, Padel, Gym, Running)' },
+      protein_pct: { type: 'number', description: 'Protein percentage of meal' },
+      fat_pct: { type: 'number', description: 'Fat percentage of meal' },
+      carbs_pct: { type: 'number', description: 'Carbs percentage of meal' },
+    }
+  }
+}
+
+export async function POST(req: Request) {
+  try {
+    const { messages, summary, attemptId: aid, photo, photoType, startDate: sd } = await req.json()
+    const attemptId = aid || 1
+
+    const { data: attempt } = await supabase.from('attempts').select('start_date').eq('attempt_number', attemptId).single()
+    const startDate = sd || attempt?.start_date || new Date().toISOString().split('T')[0]
+    const dayNum = getDayNumber(startDate)
+    const today = new Date().toISOString().split('T')[0]
+
+    // Calculate target date
+    const endDate = new Date(startDate + 'T00:00:00')
+    endDate.setDate(endDate.getDate() + 99)
+    const daysLeft = 100 - dayNum + 1
+
+    const systemInstruction = `You are Yogi, an elite AI life, fitness and yoga coach for Monish Shah. He is 42, vegan, CEO of DreamSetGo, doing a 100-day discipline challenge called Abhyasa100 rooted in Abhyasa (practice) and Vairagya (desirelessness) from Patanjali's Yoga Sutras.
+
+CURRENT STATE:
+- Attempt ${attemptId}, Day ${dayNum} of 100 (${today})
+- Started: ${startDate} | Ends: ${endDate.toISOString().split('T')[0]}
+- Days left: ${daysLeft}
+
+HABIT STRUCTURE:
+Must-Have's (3): OMAD (or full fast day), 10,000+ steps, Fast post 4pm (no food after 4pm)
+Bonus (8): Meditate, Sleep 6+hrs, Zero content, Manifest, Water 3+L, Workout, Zero inbox, Yoga Sutras
+
+SCORING: Perfect (all 11) | Solid (3 must-haves done) | Slipped (2+ must-haves missed) | Missed (nothing logged)
+
+YOUR CAPABILITIES — use these actively:
+
+1. SAVE HABITS: When Monish tells you about ANY habit completion, data point, food, steps, sleep — IMMEDIATELY call save_habits. Don't just acknowledge, SAVE IT.
+
+2. WEEKLY REVIEW: When asked "how was my week" or similar, analyze the last 7 days from the data below. Count Perfect/Solid/Slipped/Missed days. Highlight wins and call out failures. Be specific with numbers.
+
+3. STREAK TRACKING: Calculate longest consecutive Solid/Perfect days. Tell him his current streak and record streak.
+
+4. MEAL PLANNING: When asked, design specific vegan OMAD meals with approximate macros. He needs high protein vegan meals. Be creative and specific (exact ingredients, portions).
+
+5. ACCOUNTABILITY: If it's past 4pm and key habits aren't logged, point it out. If he's been quiet for days, call it out. Don't be soft.
+
+6. YOGA SUTRA OF THE DAY: When asked, share a relevant sutra from Patanjali with the sutra number and brief commentary connecting it to his current challenge state.
+
+7. PROGRESS COMPARISON: If asked about comparing attempts, analyze Attempt 1 vs current attempt.
+
+8. WEIGHT PREDICTION: Based on weight trend in the data, calculate rate of loss and predict when he'll hit 66kg target.
+
+9. SLEEP COACHING: If he mentions poor sleep or you see declining sleep hours, give specific evidence-based sleep advice.
+
+10. MOTIVATION: When he's struggling, draw from Patanjali's teachings. Reference specific sutras. Remind him why he started. Be the coach he needs — warm but HARD. Don't let him off easy.
+
+11. FOOD PHOTO ANALYSIS: When he uploads a food photo, analyze it thoroughly. Break down into Protein %, Fat %, Carbs %. Estimate calories. Then SAVE the macros using save_habits.
+
+12. WORKOUT RECOMMENDATIONS: When asked, give specific workout routines. He has access to gym, swimming, padel, and walking. Tailor to his fitness level (intermediate).
+
+PERSONALITY:
+- Direct, warm, but TOUGH when habits are missed
+- Use data and numbers, not vague encouragement
+- Reference Patanjali's Yoga Sutras when relevant
+- Celebrate wins genuinely but briefly — then push for more
+- If he's making excuses, call them out
+- You are his accountability partner, not his friend
+
+CRITICAL: ALWAYS call save_habits when he reports ANY data. Even partial data. Even one habit.
+
+JOURNEY DATA:
+${summary || 'No data logged yet. Day 1 starts now.'}
+
+THE PERFECT DAY (his ideal schedule):
+4:15am-5:00am: Manifest, Yoga Sutras, 1L water
+5:00am-6:30am: Walk & Meditate
+6:30am-7:30am: Kids Time
+7:30am-9:30am: Gym or Padel
+9:30am-2:00pm: DreamSetGo work
+2:00pm-2:30pm: Lunch (OMAD)
+2:30pm-8:00pm: DreamSetGo work
+8:00pm-10:00pm: Kids Time
+10:00pm: Sleep`
+
+    // Build Gemini messages — use last 20 messages for better context
+    const geminiMessages = messages.slice(-20).map((m: any) => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: m.role === 'system' ? [{ text: `[System: ${m.content}]` }] : [{ text: m.content }]
+    })).filter((m: any) => m.parts[0].text)
+
+    // If photo is included, add it to the last user message
+    if (photo && geminiMessages.length > 0) {
+      const lastMsg = geminiMessages[geminiMessages.length - 1]
+      if (lastMsg.role === 'user') {
+        lastMsg.parts = [
+          { inline_data: { mime_type: photoType || 'image/jpeg', data: photo } },
+          { text: (lastMsg.parts[0].text || '') + '\n\nAnalyze this food photo. Break down macros: Protein %, Fat %, Carbs %. Estimate total calories. Then save the data using save_habits.' }
+        ]
       }
-
-      const res = await fetch('/api/yogi', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      })
-      const data = await res.json()
-
-      setMessages(p => [...p, { role: 'assistant', content: data.reply }])
-
-      if (data.saved?.success) {
-        setMessages(p => [...p, { role: 'system', content: `Day ${data.saved.day} → ${data.saved.color} (${data.saved.score}/11)` }])
-      }
-
-      // Save chat to database
-      await supabase.from('chat_messages').insert([
-        { role: 'user', message: userContent || 'Photo uploaded', attempt_id: attemptId, food_photo_url: photo ? 'uploaded' : null },
-        { role: 'assistant', message: data.reply, attempt_id: attemptId, macro_data: data.macros || null }
-      ])
-
-    } catch (err: any) {
-      setMessages(p => [...p, { role: 'assistant', content: `Error: ${err.message}` }])
     }
 
-    setPhoto(null); setPhotoPreview(''); setLoading(false)
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: systemInstruction }] },
+          contents: geminiMessages,
+          tools: [{ function_declarations: [saveHabitsTool] }],
+        })
+      }
+    )
+
+    const data = await response.json()
+    if (!response.ok) return NextResponse.json({ reply: `Error from Gemini: ${JSON.stringify(data)}` })
+
+    const candidate = data.candidates?.[0]
+    if (!candidate) return NextResponse.json({ reply: 'No response from Yogi.' })
+
+    const parts = candidate.content?.parts || []
+    const functionCall = parts.find((p: any) => p.functionCall)
+    const textPart = parts.find((p: any) => p.text)
+
+    if (functionCall && functionCall.functionCall.name === 'save_habits') {
+      const savedResult = await saveHabits(functionCall.functionCall.args, attemptId)
+
+      const followUp = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: systemInstruction }] },
+            contents: [
+              ...geminiMessages,
+              candidate.content,
+              { role: 'user', parts: [{ functionResponse: { name: 'save_habits', response: savedResult } }] }
+            ],
+            tools: [{ function_declarations: [saveHabitsTool] }],
+          })
+        }
+      )
+
+      const followUpData = await followUp.json()
+      const followUpText = followUpData.candidates?.[0]?.content?.parts?.find((p: any) => p.text)?.text
+
+      return NextResponse.json({
+        reply: followUpText || `✅ Saved Day ${savedResult.day} (${savedResult.color}, ${savedResult.score}/11)`,
+        saved: savedResult,
+        macros: functionCall.functionCall.args.protein_pct ? { protein: functionCall.functionCall.args.protein_pct, fat: functionCall.functionCall.args.fat_pct, carbs: functionCall.functionCall.args.carbs_pct } : null
+      })
+    }
+
+    return NextResponse.json({ reply: textPart?.text || 'Yogi has nothing to say.', saved: null })
+
+  } catch (e: any) {
+    return NextResponse.json({ reply: `Error: ${e.message}` })
   }
-
-  const pickPhoto = (file: File | null) => {
-    setPhoto(file)
-    setPhotoPreview(file ? URL.createObjectURL(file) : '')
-  }
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 100px)' }}>
-      <h1 style={{ fontSize: 34, fontWeight: 700, letterSpacing: '-0.03em', marginBottom: 4 }}>Yogi</h1>
-      <p style={{ fontSize: 13, color: '#8E8E93', marginBottom: 12 }}>Powered by Gemini · Your AI coach & tracker</p>
-
-      <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-        <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
-          {messages.map((m, i) => (
-            <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : m.role === 'system' ? 'center' : 'flex-start', marginBottom: 10 }}>
-              {m.role === 'system' ? (
-                <div className="chat-saved">✓ {m.content}</div>
-              ) : (
-                <div className={m.role === 'user' ? 'chat-user' : 'chat-ai'} style={{ whiteSpace: 'pre-wrap' }}>{m.content}</div>
-              )}
-            </div>
-          ))}
-          {loading && <div style={{ display: 'flex' }}><div className="chat-ai" style={{ color: '#8E8E93' }}>Thinking...</div></div>}
-          <div ref={bottom} />
-        </div>
-
-        {/* Photo preview */}
-        {photoPreview && (
-          <div style={{ padding: '8px 16px', borderTop: '0.5px solid rgba(60,60,67,0.12)', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <img src={photoPreview} alt="Upload" style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'cover' }} />
-            <span style={{ fontSize: 13, color: '#8E8E93', flex: 1 }}>Photo attached</span>
-            <button onClick={() => { setPhoto(null); setPhotoPreview('') }} style={{ background: 'none', border: 'none', color: '#FF3B30', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Remove</button>
-          </div>
-        )}
-
-        {/* Input */}
-        <div style={{ padding: 12, borderTop: '0.5px solid rgba(60,60,67,0.12)', display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button onClick={() => fileRef.current?.click()} style={{ width: 36, height: 36, borderRadius: 18, background: '#F2F2F7', border: 'none', fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>📷</button>
-          <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => pickPhoto(e.target.files?.[0] || null)} />
-          <input className="chat-input" value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()} placeholder="Tell Yogi or upload a photo..." />
-          <button className="chat-send" onClick={send} disabled={loading} style={{ opacity: loading ? 0.5 : 1 }}>Send</button>
-        </div>
-      </div>
-    </div>
-  )
 }
