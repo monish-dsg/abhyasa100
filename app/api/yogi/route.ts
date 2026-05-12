@@ -75,13 +75,42 @@ const saveHabitsTool = {
 
 export async function POST(req: Request) {
   try {
-    const { messages, summary, attemptId: aid, photo, photoType, startDate: sd } = await req.json()
+    const { messages, attemptId: aid, photo, photoType, startDate: sd } = await req.json()
     const attemptId = aid || 1
 
     const { data: attempt } = await supabase.from('attempts').select('start_date').eq('attempt_number', attemptId).single()
     const startDate = sd || attempt?.start_date || new Date().toISOString().split('T')[0]
     const dayNum = getDayNumber(startDate)
     const today = new Date().toISOString().split('T')[0]
+
+    // Fetch data directly from database — don't rely on frontend
+    const { data: logs } = await supabase.from('daily_logs').select('*').eq('attempt_id', attemptId).order('day')
+    const { data: habits } = await supabase.from('habits').select('*').eq('attempt_id', attemptId).order('day')
+
+    // Build detailed summary from database
+    const summary = (logs || []).map((l: any) => {
+      const h = (habits || []).find((hab: any) => hab.day === l.day)
+      return `Day ${l.day} (${l.date}): Weight ${l.weight || '?'}kg, ${l.color || 'unscored'}, Score ${l.score || 0}/11` +
+        (h ? ` | OMAD:${h.omad?'YES':'NO'} FullFast:${h.full_fast_day?'YES':'NO'} Steps:${h.steps||0} Fast4pm:${h.fast_post_4pm?'YES':'NO'} Meditate:${h.meditate?'YES':'NO'}(${h.meditate_mins||0}min) Sleep:${h.sleep_hours||'?'}hrs ZeroContent:${h.zero_content?'YES':'NO'} Manifest:${h.manifest?'YES':'NO'} Water:${h.water_liters||0}L Workout:${h.workout?'YES':'NO'}(${h.workout_type||''}) ZeroInbox:${h.zero_inbox?'YES':'NO'} YogaSutras:${h.yoga_sutras?'YES':'NO'} Meal:${h.meal_description||'not logged'} Protein:${h.protein_pct||'?'}% Fat:${h.fat_pct||'?'}% Carbs:${h.carbs_pct||'?'}%` : ' | No habits logged')
+    }).join('\n')
+
+    // Calculate stats for Yogi
+    const totalDays = (logs || []).length
+    const perfectDays = (logs || []).filter((l: any) => l.color === 'Perfect').length
+    const solidDays = (logs || []).filter((l: any) => l.color === 'Solid').length
+    const slippedDays = (logs || []).filter((l: any) => l.color === 'Slipped').length
+    const missedDays = (logs || []).filter((l: any) => l.color === 'Missed').length
+    const weights = (logs || []).filter((l: any) => l.weight > 0).map((l: any) => ({ day: l.day, weight: l.weight }))
+    const latestWeight = weights.length > 0 ? weights[weights.length - 1].weight : null
+    const startWeight = weights.length > 0 ? weights[0].weight : null
+
+    const statsBlock = `
+STATISTICS:
+- Days logged: ${totalDays}/100 (Day ${dayNum} today)
+- Perfect: ${perfectDays} | Solid: ${solidDays} | Slipped: ${slippedDays} | Missed: ${missedDays}
+- Start weight: ${startWeight || 'not logged'}kg | Current weight: ${latestWeight || 'not logged'}kg | Target: 66kg
+- Weight lost: ${startWeight && latestWeight ? (startWeight - latestWeight).toFixed(1) : '?'}kg
+${weights.length >= 2 ? `- Weight trend: ${weights.map(w => `D${w.day}:${w.weight}`).join(' → ')}` : ''}`
 
     // Calculate target date
     const endDate = new Date(startDate + 'T00:00:00')
@@ -138,6 +167,9 @@ PERSONALITY:
 CRITICAL: ALWAYS call save_habits when he reports ANY data. Even partial data. Even one habit.
 
 JOURNEY DATA:
+${statsBlock}
+
+DAILY LOG:
 ${summary || 'No data logged yet. Day 1 starts now.'}
 
 THE PERFECT DAY (his ideal schedule):
