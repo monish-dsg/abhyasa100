@@ -2,7 +2,35 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 
-const WELCOME = '🙏 Namaste Monish. I am Yogi — your AI coach.\n\nI can track habits, analyze food photos, recommend workouts, review your week, predict your weight goal, and coach you with Patanjali\'s wisdom.\n\nJust talk to me. Say "clear past chats" to start fresh.'
+const WELCOME = '🙏 Namaste Monish. I am Yogi — your coach, your mirror, your fire.\n\nTell me about your day. Upload your food. Ask me anything. I see everything in your data and I will hold nothing back.\n\nSay "clear past chats" to start fresh.'
+
+// Compress image to max 800px and convert to base64
+function compressImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    const canvas = document.createElement('canvas')
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      img.onload = () => {
+        let w = img.width, h = img.height
+        const max = 800
+        if (w > max || h > max) {
+          if (w > h) { h = Math.round(h * max / w); w = max }
+          else { w = Math.round(w * max / h); h = max }
+        }
+        canvas.width = w; canvas.height = h
+        const ctx = canvas.getContext('2d')!
+        ctx.drawImage(img, 0, 0, w, h)
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.7)
+        resolve(dataUrl.split(',')[1])
+      }
+      img.onerror = reject
+      img.src = e.target?.result as string
+    }
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
 
 export default function YogiChat() {
   const [messages, setMessages] = useState<any[]>([])
@@ -15,45 +43,26 @@ export default function YogiChat() {
   const bottom = useRef<HTMLDivElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  // Save a single message to database
   const saveChat = async (role: string, message: string, aid: number) => {
     try {
-      const { error } = await supabase.from('chat_messages').insert({ role, message, attempt_id: aid })
-      if (error) console.error('Chat save error:', error.message)
-    } catch (e: any) {
-      console.error('Chat save failed:', e.message)
-    }
+      await supabase.from('chat_messages').insert({ role, message, attempt_id: aid })
+    } catch (e: any) { console.error('Chat save error:', e.message) }
   }
 
-  // Load chat history on mount
   useEffect(() => {
     (async () => {
-      // Get active attempt
       const { data: att } = await supabase.from('attempts').select('*').eq('status', 'active').order('attempt_number', { ascending: false }).limit(1)
       const aid = att?.[0]?.attempt_number || 1
       setAttemptId(aid)
-
-      // Load saved chats
       try {
-        const { data: chats, error } = await supabase.from('chat_messages').select('*').eq('attempt_id', aid).order('created_at', { ascending: true })
-        if (error) {
-          console.error('Chat load error:', error.message)
-          // Fallback: try loading without attempt_id filter
-          const { data: allChats } = await supabase.from('chat_messages').select('*').order('created_at', { ascending: true }).limit(100)
-          if (allChats && allChats.length > 0) {
-            setMessages(allChats.map((c: any) => ({ role: c.role, content: c.message })))
-          } else {
-            setMessages([{ role: 'assistant', content: WELCOME }])
-            await saveChat('assistant', WELCOME, aid)
-          }
-        } else if (chats && chats.length > 0) {
+        const { data: chats } = await supabase.from('chat_messages').select('*').eq('attempt_id', aid).order('created_at', { ascending: true })
+        if (chats && chats.length > 0) {
           setMessages(chats.map((c: any) => ({ role: c.role, content: c.message })))
         } else {
           setMessages([{ role: 'assistant', content: WELCOME }])
           await saveChat('assistant', WELCOME, aid)
         }
       } catch (e) {
-        console.error('Chat load failed:', e)
         setMessages([{ role: 'assistant', content: WELCOME }])
       }
       setLoadingHistory(false)
@@ -63,48 +72,40 @@ export default function YogiChat() {
   useEffect(() => { bottom.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
   const clearChats = async () => {
-    try {
-      await supabase.from('chat_messages').delete().eq('attempt_id', attemptId)
-    } catch (e) {
-      // Fallback: delete all
-      await supabase.from('chat_messages').delete().neq('id', 0)
-    }
-    const welcomeBack = '🧹 Chats cleared.\n\n' + WELCOME
-    setMessages([{ role: 'assistant', content: welcomeBack }])
-    await saveChat('assistant', welcomeBack, attemptId)
+    await supabase.from('chat_messages').delete().eq('attempt_id', attemptId).catch(() => {
+      supabase.from('chat_messages').delete().neq('id', 0)
+    })
+    const msg = '🧹 Cleared. Let\'s start fresh.\n\n' + WELCOME
+    setMessages([{ role: 'assistant', content: msg }])
+    await saveChat('assistant', msg, attemptId)
   }
 
   const send = async () => {
     if (!input.trim() && !photo) return
     const userContent = input.trim()
 
-    // Check for clear command
     if (userContent.toLowerCase().includes('clear past chats') || userContent.toLowerCase().includes('clear chats')) {
-      setInput('')
-      await clearChats()
-      return
+      setInput(''); await clearChats(); return
     }
 
-    const userMsg: any = { role: 'user', content: userContent || '📷 Photo uploaded' }
+    const userMsg = { role: 'user', content: userContent || '📷 Food photo uploaded — please analyze the macros' }
     setMessages(p => [...p, userMsg])
     setInput('')
     setLoading(true)
-
-    // Save user message to database immediately
     await saveChat('user', userMsg.content, attemptId)
 
     try {
       const body: any = { messages: [...messages, userMsg], attemptId }
 
-      // If photo, convert to base64
+      // Compress photo before sending
       if (photo) {
-        const reader = new FileReader()
-        const base64 = await new Promise<string>((res) => {
-          reader.onload = () => res((reader.result as string).split(',')[1])
-          reader.readAsDataURL(photo)
-        })
-        body.photo = base64
-        body.photoType = photo.type
+        try {
+          const compressed = await compressImage(photo)
+          body.photo = compressed
+          body.photoType = 'image/jpeg'
+        } catch (e) {
+          console.error('Image compression failed:', e)
+        }
       }
 
       const res = await fetch('/api/yogi', {
@@ -114,18 +115,14 @@ export default function YogiChat() {
       })
       const data = await res.json()
 
-      // Save and display assistant response
-      const assistantMsg = { role: 'assistant', content: data.reply }
-      setMessages(p => [...p, assistantMsg])
+      setMessages(p => [...p, { role: 'assistant', content: data.reply }])
       await saveChat('assistant', data.reply, attemptId)
 
-      // If data was saved, show confirmation
       if (data.saved?.success) {
         const sysContent = `Day ${data.saved.day} → ${data.saved.color} (${data.saved.score}/11)`
         setMessages(p => [...p, { role: 'system', content: sysContent }])
         await saveChat('system', sysContent, attemptId)
       }
-
     } catch (err: any) {
       const errContent = `Error: ${err.message}`
       setMessages(p => [...p, { role: 'assistant', content: errContent }])
@@ -135,17 +132,12 @@ export default function YogiChat() {
     setPhoto(null); setPhotoPreview(''); setLoading(false)
   }
 
-  const pickPhoto = (file: File | null) => {
-    setPhoto(file)
-    setPhotoPreview(file ? URL.createObjectURL(file) : '')
-  }
-
   if (loadingHistory) return <p style={{ padding: 40, textAlign: 'center', color: '#8E8E93' }}>Loading chats...</p>
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 100px)' }}>
       <h1 style={{ fontSize: 34, fontWeight: 700, letterSpacing: '-0.03em', marginBottom: 4 }}>Yogi</h1>
-      <p style={{ fontSize: 13, color: '#8E8E93', marginBottom: 12 }}>Powered by Gemini · {messages.length} messages</p>
+      <p style={{ fontSize: 13, color: '#8E8E93', marginBottom: 12 }}>Your AI coach · {messages.length} messages</p>
 
       <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
@@ -158,21 +150,21 @@ export default function YogiChat() {
               )}
             </div>
           ))}
-          {loading && <div style={{ display: 'flex' }}><div className="chat-ai" style={{ color: '#8E8E93' }}>Thinking...</div></div>}
+          {loading && <div style={{ display: 'flex' }}><div className="chat-ai" style={{ color: '#8E8E93' }}>Yogi is thinking... 🧘</div></div>}
           <div ref={bottom} />
         </div>
 
         {photoPreview && (
           <div style={{ padding: '8px 16px', borderTop: '0.5px solid rgba(60,60,67,0.12)', display: 'flex', alignItems: 'center', gap: 8 }}>
             <img src={photoPreview} alt="Upload" style={{ width: 48, height: 48, borderRadius: 8, objectFit: 'cover' }} />
-            <span style={{ fontSize: 13, color: '#8E8E93', flex: 1 }}>Photo attached</span>
+            <span style={{ fontSize: 13, color: '#8E8E93', flex: 1 }}>Photo ready to send</span>
             <button onClick={() => { setPhoto(null); setPhotoPreview('') }} style={{ background: 'none', border: 'none', color: '#FF3B30', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Remove</button>
           </div>
         )}
 
         <div style={{ padding: 12, borderTop: '0.5px solid rgba(60,60,67,0.12)', display: 'flex', gap: 8, alignItems: 'center' }}>
           <button onClick={() => fileRef.current?.click()} style={{ width: 36, height: 36, borderRadius: 18, background: '#F2F2F7', border: 'none', fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>📷</button>
-          <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => pickPhoto(e.target.files?.[0] || null)} />
+          <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) { setPhoto(f); setPhotoPreview(URL.createObjectURL(f)) } }} />
           <input className="chat-input" value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()} placeholder="Talk to Yogi..." />
           <button className="chat-send" onClick={send} disabled={loading} style={{ opacity: loading ? 0.5 : 1 }}>Send</button>
         </div>
