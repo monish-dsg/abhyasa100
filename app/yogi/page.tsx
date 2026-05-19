@@ -136,8 +136,15 @@ export default function YogiChat() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 100px)' }}>
-      <h1 style={{ fontSize: 34, fontWeight: 700, letterSpacing: '-0.03em', marginBottom: 4 }}>Yogi</h1>
-      <p style={{ fontSize: 13, color: '#8E8E93', marginBottom: 12 }}>Your AI coach · {messages.length} messages</p>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <h1 style={{ fontSize: 34, fontWeight: 700, letterSpacing: '-0.03em', marginBottom: 4 }}>Yogi</h1>
+          <p style={{ fontSize: 13, color: '#8E8E93', marginBottom: 12 }}>Your AI coach · {messages.length} messages</p>
+        </div>
+        <button onClick={clearChats} style={{ marginTop: 8, padding: '6px 14px', borderRadius: 8, fontSize: 13, fontWeight: 500, background: 'rgba(255,59,48,0.1)', color: '#FF3B30', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
+          Clear chats
+        </button>
+      </div>
 
       <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
