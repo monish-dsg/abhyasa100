@@ -209,6 +209,29 @@ export default function AddPage() {
     savedItems[itemKey] ? <span className="item-saved">✓</span> : <button className="item-save" onClick={onSave}>Save</button>
   )
 
+  const QUOTES = [
+    '"Abhyasa — constant inner practice. Return again and again." — Patanjali 1.12',
+    '"The mind becomes still through practice and desirelessness." — Patanjali 1.12',
+    '"Success is nearest to those whose efforts are intense and sincere." — Patanjali 1.21',
+    '"When you are inspired by a great purpose, dormant forces come alive." — Patanjali',
+    '"Yoga is the cessation of the movements of the mind. Then the seer abides in its own nature." — 1.2-1.3',
+    '"Do what you have to do. The results are not your concern." — Yoga Sutras',
+    '"The obstacles are disease, dullness, doubt, carelessness, and laziness." — Patanjali 1.30',
+    '"By cultivating friendliness, compassion, joy, and equanimity, the mind becomes purified." — 1.33',
+    '"Practice becomes firmly established when continued for a long time, without break, and with devotion." — 1.14',
+    '"Desirelessness is the conscious mastery of one who is free from craving." — 1.15',
+  ]
+
+  // Calculate daily completion %
+  const completedCount = [
+    savedItems.omad, savedItems.steps, savedItems.fast4pm,
+    savedItems.meditate, savedItems.sleep, savedItems.zc,
+    savedItems.manifest, savedItems.water, savedItems.workout,
+    savedItems.inbox, savedItems.sutras
+  ].filter(Boolean).length
+  const dailyPct = Math.round((completedCount / 11) * 100)
+  const todayQuote = QUOTES[Math.floor(new Date().getDate() % QUOTES.length)]
+
   if (loading) return <p style={{ padding: 40, textAlign: 'center', color: '#8E8E93' }}>Loading...</p>
 
   const pk = 'rgba(255,45,85,0.12)'
@@ -219,6 +242,35 @@ export default function AddPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <h1 style={{ fontSize: 34, fontWeight: 700, letterSpacing: '-0.03em' }}>Add</h1>
+
+      {/* Daily Progress Card */}
+      <div className="card" style={{ padding: '20px 16px', background: dailyPct === 100 ? 'linear-gradient(135deg, #248A3D, #34C759)' : dailyPct >= 50 ? 'linear-gradient(135deg, #FF2D55, #FF6482)' : '#fff' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          {/* Progress Ring */}
+          <div style={{ position: 'relative', width: 64, height: 64, flexShrink: 0 }}>
+            <svg width="64" height="64" viewBox="0 0 64 64">
+              <circle cx="32" cy="32" r="28" fill="none" stroke={dailyPct >= 50 ? 'rgba(255,255,255,0.2)' : '#F2F2F7'} strokeWidth="5" />
+              <circle cx="32" cy="32" r="28" fill="none" stroke={dailyPct === 100 ? '#fff' : dailyPct >= 50 ? '#fff' : '#FF2D55'} strokeWidth="5"
+                strokeDasharray={`${2 * Math.PI * 28}`} strokeDashoffset={`${2 * Math.PI * 28 * (1 - dailyPct / 100)}`}
+                strokeLinecap="round" transform="rotate(-90 32 32)" style={{ transition: 'stroke-dashoffset 0.5s ease' }} />
+            </svg>
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span style={{ fontSize: 16, fontWeight: 700, color: dailyPct >= 50 ? '#fff' : '#FF2D55' }}>{dailyPct}%</span>
+            </div>
+          </div>
+          <div style={{ flex: 1 }}>
+            <p style={{ fontSize: 17, fontWeight: 600, color: dailyPct >= 50 ? '#fff' : '#000' }}>
+              {dailyPct === 100 ? '🔥 Perfect Day!' : dailyPct >= 75 ? '💪 Almost there!' : dailyPct >= 50 ? '🏃 Keep going!' : dailyPct > 0 ? '🌅 Day started' : '☀️ New day, new chance'}
+            </p>
+            <p style={{ fontSize: 12, color: dailyPct >= 50 ? 'rgba(255,255,255,0.7)' : '#8E8E93', marginTop: 4 }}>
+              {completedCount}/11 habits logged
+            </p>
+            <p style={{ fontSize: 11, fontStyle: 'italic', color: dailyPct >= 50 ? 'rgba(255,255,255,0.6)' : '#AEAEB2', marginTop: 6, lineHeight: 1.4 }}>
+              {todayQuote}
+            </p>
+          </div>
+        </div>
+      </div>
 
       {/* Whoop */}
       <div className="card">
