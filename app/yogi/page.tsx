@@ -72,9 +72,11 @@ export default function YogiChat() {
   useEffect(() => { bottom.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
   const clearChats = async () => {
-    await supabase.from('chat_messages').delete().eq('attempt_id', attemptId).catch(() => {
-      supabase.from('chat_messages').delete().neq('id', 0)
-    })
+    try {
+      await supabase.from('chat_messages').delete().eq('attempt_id', attemptId)
+    } catch (e) {
+      await supabase.from('chat_messages').delete().neq('id', 0)
+    }
     const msg = '🧹 Cleared. Let\'s start fresh.\n\n' + WELCOME
     setMessages([{ role: 'assistant', content: msg }])
     await saveChat('assistant', msg, attemptId)
