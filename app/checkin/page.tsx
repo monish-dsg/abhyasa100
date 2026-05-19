@@ -122,8 +122,16 @@ export default function AddPage() {
   // Save individual item
   const saveItem = async (fields: Record<string, any>, itemKey: string) => {
     if (!form.day) return; const d = +form.day
-    // Ensure daily_log exists
-    await supabase.from('daily_logs').upsert({ day: d, date: form.date, attempt_id: attemptId, weight: +form.weight || 0 }, { onConflict: 'day,attempt_id' } as any)
+    // Fetch existing daily_log to preserve weight and notes
+    const { data: existingLog } = await supabase.from('daily_logs').select('*').eq('day', d).eq('attempt_id', attemptId).single()
+    // Ensure daily_log exists — preserve existing weight and notes
+    await supabase.from('daily_logs').upsert({
+      day: d,
+      date: form.date,
+      attempt_id: attemptId,
+      weight: existingLog?.weight || (+form.weight || 0),
+      notes: existingLog?.notes || form.notes || '',
+    }, { onConflict: 'day,attempt_id' } as any)
     // Upsert habits
     const habitData: any = { day: d, attempt_id: attemptId, ...fields }
     await supabase.from('habits').upsert(habitData, { onConflict: 'day,attempt_id' } as any)
@@ -157,7 +165,9 @@ export default function AddPage() {
     const fp = `attempt-${attemptId}/day-${d}/${type}.${ext}`
     await supabase.storage.from('photos').upload(fp, file, { upsert: true })
     const { data: u } = supabase.storage.from('photos').getPublicUrl(fp)
-    await supabase.from('daily_logs').upsert({ day: d, date: form.date, attempt_id: attemptId, weight: +form.weight || 0 }, { onConflict: 'day,attempt_id' } as any)
+    // Preserve existing daily_log data
+    const { data: existingLog } = await supabase.from('daily_logs').select('*').eq('day', d).eq('attempt_id', attemptId).single()
+    await supabase.from('daily_logs').upsert({ day: d, date: form.date, attempt_id: attemptId, weight: existingLog?.weight || (+form.weight || 0), notes: existingLog?.notes || '' }, { onConflict: 'day,attempt_id' } as any)
     const { data: ex } = await supabase.from('photos').select('id').eq('day', d).eq('type', type).eq('attempt_id', attemptId).single()
     if (ex) await supabase.from('photos').update({ photo_url: u.publicUrl }).eq('id', ex.id)
     else await supabase.from('photos').insert({ day: d, date: form.date, type, photo_url: u.publicUrl, caption: type, attempt_id: attemptId })
