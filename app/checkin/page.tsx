@@ -29,14 +29,27 @@ export default function AddPage() {
   const [whoopOk, setWhoopOk] = useState<boolean | null>(null)
   const [syncing, setSyncing] = useState(false)
   const [syncFields, setSyncFields] = useState<string[]>([])
+  const [todayDayNum, setTodayDayNum] = useState(1)
+
+  // Calculate today's day number in IST
+  function getTodayIST(): string {
+    const now = new Date()
+    const ist = new Date(now.getTime() + (5.5 * 60 * 60 * 1000))
+    return ist.toISOString().split('T')[0]
+  }
+
+  function calcDayNum(sd: string): number {
+    const today = getTodayIST()
+    return Math.max(1, Math.min(100, Math.floor((new Date(today + 'T00:00:00').getTime() - new Date(sd + 'T00:00:00').getTime()) / 864e5) + 1))
+  }
 
   // Init
   useEffect(() => {
     (async () => {
       const { startDate: sd, attemptId: aid } = await getStartDate()
       setStartDate(sd); setAttemptId(aid)
-      const today = new Date()
-      const dayNum = Math.max(1, Math.floor((today.getTime() - new Date(sd + 'T00:00:00').getTime()) / 864e5) + 1)
+      const dayNum = calcDayNum(sd)
+      setTodayDayNum(dayNum)
       setForm((p: any) => ({ ...p, day: String(dayNum), date: dayDate(sd, dayNum) }))
       loadDay(dayNum, aid, sd)
       const { data: dl } = await supabase.from('daily_logs').select('day').eq('attempt_id', aid).order('day')
@@ -301,14 +314,20 @@ export default function AddPage() {
           </div>
           <button className="day-btn" onClick={() => goDay(String(Math.min(100, (+form.day || 0) + 1)))}>›</button>
         </div>
-        {existingDays.length > 0 && (
+        {todayDayNum > 0 && (
           <div style={{ padding: '0 16px 10px', display: 'flex', flexWrap: 'wrap', gap: 4, borderTop: '0.5px solid rgba(60,60,67,0.12)', paddingTop: 10 }}>
-            {existingDays.map(d => (
-              <button key={d} onClick={() => goDay(String(d))} style={{
-                padding: '3px 9px', borderRadius: 6, fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-                background: +form.day === d ? '#FF2D55' : '#F2F2F7', color: +form.day === d ? '#fff' : '#8E8E93',
-              }}>{d}</button>
-            ))}
+            {Array.from({ length: todayDayNum }, (_, i) => i + 1).map(d => {
+              const hasData = existingDays.includes(d)
+              const isSelected = +form.day === d
+              const isToday = d === todayDayNum
+              return (
+                <button key={d} onClick={() => goDay(String(d))} style={{
+                  padding: '3px 9px', borderRadius: 6, fontSize: 12, fontWeight: 600, border: isToday && !isSelected ? '1.5px solid #FF2D55' : 'none', cursor: 'pointer', fontFamily: 'inherit',
+                  background: isSelected ? '#FF2D55' : hasData ? '#34C759' : '#F2F2F7',
+                  color: isSelected ? '#fff' : hasData ? '#fff' : '#C7C7CC',
+                }}>{d}</button>
+              )
+            })}
           </div>
         )}
       </div>
