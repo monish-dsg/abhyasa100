@@ -92,7 +92,7 @@ export default function Dashboard() {
   // Graph data
   const weightData = logs.filter(l => l.weight).map(l => ({ day: `D${l.day}`, weight: l.weight }))
   const stepsData = habits.map(h => ({ day: `D${h.day}`, steps: h.steps || 0 }))
-  const omadData = habits.map(h => ({ day: `D${h.day}`, omad: (h.omad || h.full_fast_day) ? 1 : 0 }))
+  const omadData = habits.map(h => ({ day: `D${h.day}`, done: (h.omad || h.full_fast_day) ? 1 : 0, missed: (h.omad || h.full_fast_day) ? 0 : 1 }))
   const macroData = habits.filter(h => h.protein_pct).map(h => ({ day: `D${h.day}`, protein: h.protein_pct, fat: h.fat_pct, carbs: h.carbs_pct }))
 
   return (
@@ -187,12 +187,13 @@ export default function Dashboard() {
       {/* OMAD Graph */}
       {omadData.length > 0 && (
         <div className="card graph-card">
-          <h3>OMAD Streak</h3>
+          <h3>OMAD Tracker</h3>
           <ResponsiveContainer width="100%" height={80}>
             <BarChart data={omadData}>
               <XAxis dataKey="day" tick={{ fontSize: 10 }} />
               <Tooltip />
-              <Bar dataKey="omad" fill="#34C759" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="done" stackId="a" fill="#34C759" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="missed" stackId="a" fill="#FF3B30" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
