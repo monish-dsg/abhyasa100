@@ -22,6 +22,7 @@ export default function AddPage() {
   const [startDate, setStartDate] = useState('')
   const [loading, setLoading] = useState(true)
   const [existingDays, setExistingDays] = useState<number[]>([])
+  const [dayColors, setDayColors] = useState<Record<number, string>>({})
   const [photos, setPhotos] = useState<Record<string, File | null>>({ scale: null, food: null })
   const [previews, setPreviews] = useState<Record<string, string>>({ scale: '', food: '' })
   const [existing, setExisting] = useState<Record<string, string>>({ scale: '', food: '' })
@@ -52,8 +53,13 @@ export default function AddPage() {
       setTodayDayNum(dayNum)
       setForm((p: any) => ({ ...p, day: String(dayNum), date: dayDate(sd, dayNum) }))
       loadDay(dayNum, aid, sd)
-      const { data: dl } = await supabase.from('daily_logs').select('day').eq('attempt_id', aid).order('day')
-      if (dl) setExistingDays(dl.map(d => d.day))
+      const { data: dl } = await supabase.from('daily_logs').select('day, color').eq('attempt_id', aid).order('day')
+      if (dl) {
+        setExistingDays(dl.map(d => d.day))
+        const colors: Record<number, string> = {}
+        dl.forEach(d => { colors[d.day] = d.color || '' })
+        setDayColors(colors)
+      }
       fetch('/api/whoop/sync?date=2026-01-01').then(r => r.json()).then(d => setWhoopOk(d.connected !== false)).catch(() => setWhoopOk(false))
       setLoading(false)
     })()
@@ -235,12 +241,19 @@ export default function AddPage() {
     '"Desirelessness is the conscious mastery of one who is free from craving." — 1.15',
   ]
 
-  // Calculate daily completion %
+  // Calculate daily completion % from actual data, not savedItems
   const completedCount = [
-    savedItems.omad, savedItems.steps, savedItems.fast4pm,
-    savedItems.meditate, savedItems.sleep, savedItems.zc,
-    savedItems.manifest, savedItems.water, savedItems.workout,
-    savedItems.inbox, savedItems.sutras
+    form.omad || form.full_fast_day,
+    +form.steps >= 10000,
+    form.fast_post_4pm,
+    form.meditate,
+    +form.sleep_hours >= 6,
+    form.zero_content,
+    form.manifest,
+    +form.water_liters >= 3,
+    form.workout,
+    form.zero_inbox,
+    form.yoga_sutras
   ].filter(Boolean).length
   const dailyPct = Math.round((completedCount / 11) * 100)
   const todayQuote = QUOTES[Math.floor(new Date().getDate() % QUOTES.length)]
@@ -320,11 +333,14 @@ export default function AddPage() {
               const hasData = existingDays.includes(d)
               const isSelected = +form.day === d
               const isToday = d === todayDayNum
+              const color = dayColors[d]
+              const colorMap: Record<string, string> = { 'Perfect': '#248A3D', 'Solid': '#34C759', 'Slipped': '#FF9500', 'Missed': '#FF3B30' }
+              const bg = isSelected ? '#FF2D55' : color ? (colorMap[color] || '#34C759') : '#F2F2F7'
+              const txt = isSelected ? '#fff' : hasData ? '#fff' : '#C7C7CC'
               return (
                 <button key={d} onClick={() => goDay(String(d))} style={{
                   padding: '3px 9px', borderRadius: 6, fontSize: 12, fontWeight: 600, border: isToday && !isSelected ? '1.5px solid #FF2D55' : 'none', cursor: 'pointer', fontFamily: 'inherit',
-                  background: isSelected ? '#FF2D55' : hasData ? '#34C759' : '#F2F2F7',
-                  color: isSelected ? '#fff' : hasData ? '#fff' : '#C7C7CC',
+                  background: bg, color: txt,
                 }}>{d}</button>
               )
             })}
@@ -388,6 +404,11 @@ export default function AddPage() {
         {form.omad && (
           <div style={{ padding: '0 16px 10px' }}>
             <textarea className="notes-input" rows={2} value={form.meal_description} onChange={e => f('meal_description', e.target.value)} placeholder="What did you eat?" />
+          </div>
+        )}
+        {!form.omad && !form.full_fast_day && (
+          <div style={{ padding: '0 16px 10px' }}>
+            <textarea className="notes-input" rows={2} value={form.meal_description} onChange={e => f('meal_description', e.target.value)} placeholder="What did you eat today? (even without OMAD)" />
           </div>
         )}
         <div className="row">
