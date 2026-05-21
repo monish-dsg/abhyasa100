@@ -15,7 +15,6 @@ export default function Sutras() {
   const [padas, setPadas] = useState<any[]>([])
   const [selVolume, setSelVolume] = useState<any>(null)
   const [selChapter, setSelChapter] = useState<number | null>(null)
-  const [selSutra, setSelSutra] = useState<any>(null)
 
   useEffect(() => {
     supabase.from('yoga_sutras').select('*').order('volume').then(({ data }) => { if (data) setSutras(data) })
@@ -75,8 +74,8 @@ export default function Sutras() {
         </div>
       )}
 
-      {/* CHAPTER VIEW */}
-      {tab === 'padas' && selChapter && !selSutra && (
+      {/* CHAPTER VIEW - scrollable reading */}
+      {tab === 'padas' && selChapter && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <button onClick={() => setSelChapter(null)} style={{ background: 'none', border: 'none', color: '#FF2D55', fontSize: 15, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', padding: '4px 0' }}>
             ← Back to Chapters
@@ -84,51 +83,32 @@ export default function Sutras() {
           <div className="card" style={{ padding: '12px 16px', background: 'linear-gradient(135deg, #FF2D55, #FF6482)' }}>
             <p style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.7)', letterSpacing: '0.04em' }}>CHAPTER {selChapter}</p>
             <p style={{ fontSize: 20, fontWeight: 700, color: '#fff', marginTop: 4 }}>{PADAS[selChapter - 1]?.name}</p>
-            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>{PADAS[selChapter - 1]?.desc} · {chapterSutras.length} sutras loaded</p>
+            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>{PADAS[selChapter - 1]?.desc} · {chapterSutras.length} sutras</p>
           </div>
           {chapterSutras.length === 0 ? (
             <div className="card" style={{ padding: '32px 16px', textAlign: 'center' }}>
               <p style={{ color: '#8E8E93' }}>No sutras loaded yet for this chapter</p>
             </div>
           ) : (
-            chapterSutras.map(s => (
-              <div key={s.id} onClick={() => setSelSutra(s)} className="card" style={{ padding: '14px 16px', cursor: 'pointer' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div style={{ flex: 1 }}>
-                    <p style={{ fontSize: 13, fontWeight: 600, color: '#FF2D55' }}>{s.sutra_number}</p>
-                    <p style={{ fontSize: 14, fontStyle: 'italic', color: '#555', marginTop: 4, lineHeight: 1.4 }}>{s.sanskrit}</p>
-                  </div>
-                  <span style={{ fontSize: 16, color: '#C7C7CC', marginLeft: 8 }}>›</span>
+            <div className="card sutra-reader">
+              {chapterSutras.map((s, i) => (
+                <div key={s.id} style={{ marginBottom: 32, paddingBottom: i < chapterSutras.length - 1 ? 32 : 0, borderBottom: i < chapterSutras.length - 1 ? '0.5px solid rgba(60,60,67,0.12)' : 'none' }}>
+                  <p style={{ fontSize: 12, fontWeight: 600, color: '#FF2D55', letterSpacing: '0.04em', marginBottom: 8 }}>SUTRA {s.sutra_number}</p>
+                  <p style={{ fontSize: 18, fontWeight: 600, fontStyle: 'italic', color: '#333', lineHeight: 1.5, marginBottom: 12 }}>
+                    {s.sanskrit}
+                  </p>
+                  {s.word_meanings && (
+                    <div style={{ background: 'rgba(255,45,85,0.04)', borderLeft: '3px solid #FF2D55', borderRadius: '0 8px 8px 0', padding: '10px 14px', marginBottom: 12 }}>
+                      {s.word_meanings.split(';').map((w: string, j: number) => (
+                        <p key={j} style={{ fontSize: 13, color: '#666', lineHeight: 1.5, marginBottom: 1 }}>{w.trim()}</p>
+                      ))}
+                    </div>
+                  )}
+                  <p style={{ fontSize: 16, lineHeight: 1.85, color: '#333' }}>{s.commentary}</p>
                 </div>
-              </div>
-            ))
+              ))}
+            </div>
           )}
-        </div>
-      )}
-
-      {/* INDIVIDUAL SUTRA VIEW */}
-      {tab === 'padas' && selSutra && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <button onClick={() => setSelSutra(null)} style={{ background: 'none', border: 'none', color: '#FF2D55', fontSize: 15, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', padding: '4px 0' }}>
-            ← Back to {PADAS[(selSutra.chapter || 1) - 1]?.name}
-          </button>
-          <div className="card sutra-reader">
-            <p style={{ fontSize: 11, fontWeight: 600, color: '#FF2D55', letterSpacing: '0.04em', marginBottom: 8 }}>
-              {PADAS[(selSutra.chapter || 1) - 1]?.name?.toUpperCase()} · SUTRA {selSutra.sutra_number}
-            </p>
-            <p style={{ fontSize: 20, fontWeight: 600, fontStyle: 'italic', color: '#333', lineHeight: 1.5, marginBottom: 16 }}>
-              {selSutra.sanskrit}
-            </p>
-            {selSutra.word_meanings && (
-              <div style={{ background: 'rgba(255,45,85,0.04)', borderLeft: '3px solid #FF2D55', borderRadius: '0 8px 8px 0', padding: '12px 16px', marginBottom: 16 }}>
-                <p style={{ fontSize: 11, fontWeight: 600, color: '#FF2D55', letterSpacing: '0.04em', marginBottom: 6 }}>WORD MEANINGS</p>
-                {selSutra.word_meanings.split(';').map((w: string, i: number) => (
-                  <p key={i} style={{ fontSize: 14, color: '#555', lineHeight: 1.6, marginBottom: 2 }}>{w.trim()}</p>
-                ))}
-              </div>
-            )}
-            <p style={{ fontSize: 16, lineHeight: 1.85, color: '#333' }}>{selSutra.commentary}</p>
-          </div>
         </div>
       )}
 
