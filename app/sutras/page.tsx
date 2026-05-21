@@ -18,7 +18,18 @@ export default function Sutras() {
 
   useEffect(() => {
     supabase.from('yoga_sutras').select('*').order('volume').then(({ data }) => { if (data) setSutras(data) })
-    supabase.from('sutra_padas').select('*').order('chapter').order('sutra_number').then(({ data }) => { if (data) setPadas(data) })
+    supabase.from('sutra_padas').select('*').order('chapter').then(({ data }) => {
+      if (data) {
+        // Sort numerically by sutra number (1.1, 1.2, ... 1.10, 1.11)
+        data.sort((a: any, b: any) => {
+          if (a.chapter !== b.chapter) return a.chapter - b.chapter
+          const aN = parseFloat(a.sutra_number.split('.').pop() || '0')
+          const bN = parseFloat(b.sutra_number.split('.').pop() || '0')
+          return aN - bN
+        })
+        setPadas(data)
+      }
+    })
   }, [])
 
   const formatSummary = (text: string) => {
