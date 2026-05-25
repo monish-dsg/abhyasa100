@@ -232,12 +232,15 @@ export default function Dashboard() {
       <div className="card" style={{ overflow: 'hidden' }}>
         <p style={{ fontSize: 15, fontWeight: 600, padding: '12px 16px', borderBottom: '0.5px solid rgba(60,60,67,0.12)' }}>Log</p>
         {logs.length === 0 ? <p style={{ padding: 24, textAlign: 'center', color: '#8E8E93', fontSize: 15 }}>No entries yet</p> :
-          [...logs].reverse().map((l, i) => (
+          [...logs].reverse().map((l, i) => {
+            const calcDate = addDays(startDate, l.day - 1)
+            return (
             <div key={l.id} className="log-row">
-              <div><span style={{ fontSize: 15, fontWeight: 600 }}>Day {l.day}</span><span style={{ fontSize: 12, color: '#8E8E93', marginLeft: 8 }}>{l.date}</span>{l.weight > 0 && <span style={{ fontSize: 12, color: '#8E8E93', marginLeft: 8 }}>{l.weight}kg</span>}</div>
+              <div><span style={{ fontSize: 15, fontWeight: 600 }}>Day {l.day}</span><span style={{ fontSize: 12, color: '#8E8E93', marginLeft: 8 }}>{fmtD(calcDate)}</span>{l.weight > 0 && <span style={{ fontSize: 12, color: '#8E8E93', marginLeft: 8 }}>{l.weight}kg</span>}</div>
               <span className="badge" style={{ background: CM[l.color]?.bg || '#E5E5EA' }}>{l.score}/11</span>
             </div>
-          ))
+            )
+          })
         }
       </div>
     </div>
