@@ -83,7 +83,7 @@ export default function AddPage() {
     const { data: h } = await supabase.from('habits').select('*').eq('day', d).eq('attempt_id', a).single()
     const { data: l } = await supabase.from('daily_logs').select('*').eq('day', d).eq('attempt_id', a).single()
     if (h || l) {
-      setForm({ day: String(d), date: l?.date || dayDate(s, d), weight: l?.weight ? String(l.weight) : '',
+      setForm({ day: String(d), date: dayDate(s, d), weight: l?.weight ? String(l.weight) : '',
         omad: h?.omad ?? false, full_fast_day: h?.full_fast_day ?? false, meal_description: h?.meal_description || '',
         steps: h?.steps ? String(h.steps) : '', fast_post_4pm: h?.fast_post_4pm ?? false,
         meditate: h?.meditate ?? false, meditate_mins: h?.meditate_mins ? String(h.meditate_mins) : '',
@@ -141,17 +141,13 @@ export default function AddPage() {
   // Save individual item
   const saveItem = async (fields: Record<string, any>, itemKey: string) => {
     if (!form.day) return; const d = +form.day
-    // Fetch existing daily_log to preserve weight and notes
+    // Check if daily_log exists
     const { data: existingLog } = await supabase.from('daily_logs').select('*').eq('day', d).eq('attempt_id', attemptId).single()
-    // Ensure daily_log exists — preserve existing weight and notes
-    await supabase.from('daily_logs').upsert({
-      day: d,
-      date: form.date,
-      attempt_id: attemptId,
-      weight: existingLog?.weight || (+form.weight || 0),
-      notes: existingLog?.notes || form.notes || '',
-    }, { onConflict: 'day,attempt_id' } as any)
-    // Upsert habits
+    if (!existingLog) {
+      // Create minimal daily_log only if it doesn't exist — never overwrite
+      await supabase.from('daily_logs').insert({ day: d, date: form.date, attempt_id: attemptId, weight: 0, notes: '' })
+    }
+    // Upsert habits — this NEVER touches daily_logs weight or notes
     const habitData: any = { day: d, attempt_id: attemptId, ...fields }
     await supabase.from('habits').upsert(habitData, { onConflict: 'day,attempt_id' } as any)
     // Recalc color
@@ -174,9 +170,16 @@ export default function AddPage() {
     if (dl) setExistingDays(dl.map(d => d.day))
   }
 
-  const saveWeight = () => saveItem({ }, 'weight').then(() => {
-    supabase.from('daily_logs').update({ weight: +form.weight }).eq('day', +form.day).eq('attempt_id', attemptId)
-  })
+  const saveWeight = async () => {
+    if (!form.day) return; const d = +form.day
+    const { data: existingLog } = await supabase.from('daily_logs').select('*').eq('day', d).eq('attempt_id', attemptId).single()
+    if (existingLog) {
+      await supabase.from('daily_logs').update({ weight: +form.weight || 0 }).eq('day', d).eq('attempt_id', attemptId)
+    } else {
+      await supabase.from('daily_logs').insert({ day: d, date: form.date, attempt_id: attemptId, weight: +form.weight || 0, notes: '' })
+    }
+    setSavedItems(p => ({ ...p, weight: true }))
+  }
 
   const savePhoto = async (type: string) => {
     const file = photos[type]; if (!file || !form.day) return; const d = +form.day
@@ -184,9 +187,11 @@ export default function AddPage() {
     const fp = `attempt-${attemptId}/day-${d}/${type}.${ext}`
     await supabase.storage.from('photos').upload(fp, file, { upsert: true })
     const { data: u } = supabase.storage.from('photos').getPublicUrl(fp)
-    // Preserve existing daily_log data
-    const { data: existingLog } = await supabase.from('daily_logs').select('*').eq('day', d).eq('attempt_id', attemptId).single()
-    await supabase.from('daily_logs').upsert({ day: d, date: form.date, attempt_id: attemptId, weight: existingLog?.weight || (+form.weight || 0), notes: existingLog?.notes || '' }, { onConflict: 'day,attempt_id' } as any)
+    // Only create daily_log if it doesn't exist — never overwrite weight or notes
+    const { data: existingLog } = await supabase.from('daily_logs').select('id').eq('day', d).eq('attempt_id', attemptId).single()
+    if (!existingLog) {
+      await supabase.from('daily_logs').insert({ day: d, date: form.date, attempt_id: attemptId, weight: 0, notes: '' })
+    }
     const { data: ex } = await supabase.from('photos').select('id').eq('day', d).eq('type', type).eq('attempt_id', attemptId).single()
     if (ex) await supabase.from('photos').update({ photo_url: u.publicUrl }).eq('id', ex.id)
     else await supabase.from('photos').insert({ day: d, date: form.date, type, photo_url: u.publicUrl, caption: type, attempt_id: attemptId })
@@ -488,10 +493,47 @@ export default function AddPage() {
       <div className="card" style={{ padding: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
           <span style={{ fontSize: 15, fontWeight: 600 }}>How are you feeling?</span>
-          <ItemSave itemKey="notes" onSave={() => { supabase.from('daily_logs').upsert({ day: +form.day, date: form.date, attempt_id: attemptId, notes: form.notes, weight: +form.weight || 0 }, { onConflict: 'day,attempt_id' } as any); setSavedItems(p => ({ ...p, notes: true })) }} />
+          <ItemSave itemKey="notes" onSave={async () => {
+            const d = +form.day; if (!d) return
+            const { data: ex } = await supabase.from('daily_logs').select('id').eq('day', d).eq('attempt_id', attemptId).single()
+            if (ex) { await supabase.from('daily_logs').update({ notes: form.notes }).eq('day', d).eq('attempt_id', attemptId) }
+            else { await supabase.from('daily_logs').insert({ day: d, date: form.date, attempt_id: attemptId, notes: form.notes, weight: 0 }) }
+            setSavedItems(p => ({ ...p, notes: true }))
+          }} />
         </div>
         <textarea className="notes-input" rows={3} value={form.notes} onChange={e => f('notes', e.target.value)} placeholder="Write something..." />
       </div>
+
+      {/* Mark as Missed */}
+      <button onClick={async () => {
+        if (!form.day) return
+        const d = +form.day
+        const confirmed = window.confirm(`Mark Day ${d} as Missed? This means you skipped your practice for the day.`)
+        if (!confirmed) return
+        const { data: ex } = await supabase.from('daily_logs').select('id').eq('day', d).eq('attempt_id', attemptId).single()
+        if (ex) {
+          await supabase.from('daily_logs').update({ color: 'Missed', score: 0 }).eq('day', d).eq('attempt_id', attemptId)
+        } else {
+          await supabase.from('daily_logs').insert({ day: d, date: form.date, attempt_id: attemptId, weight: 0, score: 0, color: 'Missed', notes: form.notes || 'Day marked as missed' })
+        }
+        setSavedItems(p => ({ ...p, missed: true }))
+        // Refresh day colors
+        const { data: dl } = await supabase.from('daily_logs').select('day, color').eq('attempt_id', attemptId).order('day')
+        if (dl) {
+          setExistingDays(dl.map((x: any) => x.day))
+          const colors: Record<number, string> = {}
+          dl.forEach((x: any) => { colors[x.day] = x.color || '' })
+          setDayColors(colors)
+        }
+      }} style={{
+        width: '100%', padding: 14, borderRadius: 14,
+        background: savedItems.missed ? '#FF3B30' : 'none',
+        color: savedItems.missed ? '#fff' : '#FF3B30',
+        border: savedItems.missed ? 'none' : '1.5px solid #FF3B30',
+        fontSize: 15, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+      }}>
+        {savedItems.missed ? '✓ Day Marked as Missed' : `Mark Day ${form.day} as Missed`}
+      </button>
     </div>
   )
 }
