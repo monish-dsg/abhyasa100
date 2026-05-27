@@ -4,11 +4,21 @@ import { supabase } from '../../lib/supabase'
 
 const getStartDate = async () => {
   const { data } = await supabase.from('attempts').select('*').eq('status', 'active').order('attempt_number', { ascending: false }).limit(1)
-  return { startDate: data?.[0]?.start_date || new Date().toISOString().split('T')[0], attemptId: data?.[0]?.attempt_number || 1 }
+  return { startDate: data?.[0]?.start_date || todayStr(), attemptId: data?.[0]?.attempt_number || 1 }
 }
 
-function dayDate(start: string, d: number): string { const x = new Date(start + 'T00:00:00'); x.setDate(x.getDate() + d - 1); return x.toISOString().split('T')[0] }
-function fmtDate(d: string): string { return new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }) }
+function todayStr(): string {
+  const now = new Date()
+  const ist = new Date(now.getTime() + (5.5 * 60 * 60 * 1000))
+  return `${ist.getUTCFullYear()}-${String(ist.getUTCMonth()+1).padStart(2,'0')}-${String(ist.getUTCDate()).padStart(2,'0')}`
+}
+
+function dayDate(start: string, d: number): string {
+  const x = new Date(start + 'T12:00:00')
+  x.setDate(x.getDate() + d - 1)
+  return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`
+}
+function fmtDate(d: string): string { return new Date(d + 'T12:00:00').toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }) }
 
 const DF: any = { day:'', date:'', weight:'', omad:false, full_fast_day:false, meal_description:'',
   steps:'', fast_post_4pm:false, meditate:false, meditate_mins:'', meditate_start:'', meditate_end:'',
@@ -36,12 +46,12 @@ export default function AddPage() {
   function getTodayIST(): string {
     const now = new Date()
     const ist = new Date(now.getTime() + (5.5 * 60 * 60 * 1000))
-    return ist.toISOString().split('T')[0]
+    return `${ist.getUTCFullYear()}-${String(ist.getUTCMonth()+1).padStart(2,'0')}-${String(ist.getUTCDate()).padStart(2,'0')}`
   }
 
   function calcDayNum(sd: string): number {
     const today = getTodayIST()
-    return Math.max(1, Math.min(100, Math.floor((new Date(today + 'T00:00:00').getTime() - new Date(sd + 'T00:00:00').getTime()) / 864e5) + 1))
+    return Math.max(1, Math.min(100, Math.floor((new Date(today + 'T12:00:00').getTime() - new Date(sd + 'T12:00:00').getTime()) / 864e5) + 1))
   }
 
   // Init
