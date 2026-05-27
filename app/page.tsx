@@ -21,9 +21,16 @@ function getColor(h: any, hasData: boolean) {
 }
 
 function addDays(date: string, days: number): string {
-  const d = new Date(date + 'T00:00:00'); d.setDate(d.getDate() + days); return d.toISOString().split('T')[0]
+  const d = new Date(date + 'T12:00:00')
+  d.setDate(d.getDate() + days)
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
 }
-function fmtD(d: string) { return new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }) }
+function fmtD(d: string) { return new Date(d + 'T12:00:00').toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }) }
+function todayIST(): string {
+  const now = new Date()
+  const ist = new Date(now.getTime() + (5.5 * 60 * 60 * 1000))
+  return `${ist.getUTCFullYear()}-${String(ist.getUTCMonth()+1).padStart(2,'0')}-${String(ist.getUTCDate()).padStart(2,'0')}`
+}
 
 export default function Dashboard() {
   const [logs, setLogs] = useState<any[]>([])
@@ -54,7 +61,7 @@ export default function Dashboard() {
     // Mark current attempt as abandoned
     await supabase.from('attempts').update({ status: 'abandoned' }).eq('attempt_number', activeAttempt)
     const newNum = (attempts.length > 0 ? Math.max(...attempts.map(a => a.attempt_number)) : 0) + 1
-    const today = new Date().toISOString().split('T')[0]
+    const today = todayIST()
     await supabase.from('attempts').insert({ attempt_number: newNum, start_date: today, status: 'active' })
     setActiveAttempt(newNum)
     await loadData(newNum)
@@ -62,9 +69,9 @@ export default function Dashboard() {
   }
 
   const currentAttempt = attempts.find(a => a.attempt_number === activeAttempt)
-  const startDate = currentAttempt?.start_date || new Date().toISOString().split('T')[0]
+  const startDate = currentAttempt?.start_date || todayIST()
   const endDate = addDays(startDate, 99)
-  const today = new Date().toISOString().split('T')[0]
+  const today = todayIST()
   const daysElapsed = Math.max(0, Math.floor((new Date(today).getTime() - new Date(startDate).getTime()) / 864e5) + 1)
   const pctComplete = Math.min(100, Math.round((logs.length / 100) * 100))
 
