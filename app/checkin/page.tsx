@@ -447,9 +447,12 @@ export default function AddPage() {
         </div>
 
         <div className="row">
-          <div className="row-icon" style={{ background: pk }}>🕓</div>
+          <div className="row-icon" style={{ background: pk }}>🥗</div>
           <div className="row-body">
-            <span className="row-label">Fast post 4pm</span>
+            <div>
+              <span className="row-label">Ate Clean</span>
+              <p style={{ fontSize: 11, color: '#8E8E93', marginTop: 2 }}>No fried, no processed, no canned/bottled drinks, no wheat, no bread, no sugar</p>
+            </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <ItemSave itemKey="fast4pm" onSave={() => saveItem({ fast_post_4pm: form.fast_post_4pm }, 'fast4pm')} />
               <Toggle k="fast_post_4pm" />
@@ -514,7 +517,8 @@ export default function AddPage() {
         <textarea className="notes-input" rows={3} value={form.notes} onChange={e => f('notes', e.target.value)} placeholder="Write something..." />
       </div>
 
-      {/* Mark as Missed */}
+      {/* Mark as Missed - only show when nothing has been done */}
+      {completedCount === 0 && !savedItems.weight && !savedItems.notes && (
       <button onClick={async () => {
         if (!form.day) return
         const d = +form.day
@@ -527,7 +531,6 @@ export default function AddPage() {
           await supabase.from('daily_logs').insert({ day: d, date: form.date, attempt_id: attemptId, weight: 0, score: 0, color: 'Missed', notes: form.notes || 'Day marked as missed' })
         }
         setSavedItems(p => ({ ...p, missed: true }))
-        // Refresh day colors
         const { data: dl } = await supabase.from('daily_logs').select('day, color').eq('attempt_id', attemptId).order('day')
         if (dl) {
           setExistingDays(dl.map((x: any) => x.day))
@@ -544,6 +547,7 @@ export default function AddPage() {
       }}>
         {savedItems.missed ? '✓ Day Marked as Missed' : `Mark Day ${form.day} as Missed`}
       </button>
+      )}
     </div>
   )
 }
