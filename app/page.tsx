@@ -11,7 +11,7 @@ function addDays(date: string, days: number): string {
   const d = new Date(date + 'T12:00:00'); d.setDate(d.getDate() + days)
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
 }
-function fmtD(d: string) { return new Date(d + 'T12:00:00').toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }) }
+function fmtD(d: string) { return new Date(d + 'T12:00:00').toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }) }
 
 const CM: Record<string, string> = { 'Green': '#34C759', 'Amber': '#FF9500', 'Red': '#FF3B30' }
 
@@ -105,16 +105,18 @@ export default function Dashboard() {
       </div>
 
       {/* Hero */}
-      <div className="card" style={{ padding: '24px 20px', background: 'linear-gradient(135deg, #1C1C1E, #2C2C2E)' }}>
-        <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', fontWeight: 600, letterSpacing: '0.05em' }}>ABHYASA100</p>
-        <h1 style={{ fontSize: 36, fontWeight: 700, color: '#fff', letterSpacing: '-0.03em', marginTop: 4 }}>Week {weekNum} <span style={{ fontSize: 18, color: 'rgba(255,255,255,0.4)' }}>of 100</span></h1>
-        <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)', marginTop: 4 }}>Day {dayNum} · {fmtD(startDate)} → {fmtD(addDays(startDate, 699))}</p>
-        <div className="progress-track" style={{ marginTop: 16, background: 'rgba(255,255,255,0.1)' }}>
-          <div className="progress-fill" style={{ width: `${Math.min(100, Math.round(weekNum))}%`, background: 'linear-gradient(90deg, #FF2D55, #FF6482)' }} />
+      <div className="card" style={{ padding: '24px 20px', background: 'linear-gradient(135deg, #FF2D55, #FF6482, #FF8FA3)', position: 'relative', overflow: 'hidden' }}>
+        <div style={{ position: 'absolute', top: -20, right: -20, width: 120, height: 120, borderRadius: '50%', background: 'rgba(255,255,255,0.1)' }} />
+        <div style={{ position: 'absolute', bottom: -30, left: -30, width: 80, height: 80, borderRadius: '50%', background: 'rgba(255,255,255,0.08)' }} />
+        <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.7)', fontWeight: 600, letterSpacing: '0.05em' }}>ABHYASA100</p>
+        <h1 style={{ fontSize: 36, fontWeight: 700, color: '#fff', letterSpacing: '-0.03em', marginTop: 4 }}>Week {weekNum} <span style={{ fontSize: 18, color: 'rgba(255,255,255,0.5)' }}>of 100</span></h1>
+        <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.6)', marginTop: 4 }}>Day {dayNum} · {fmtD(startDate)} → {fmtD(addDays(startDate, 699))}</p>
+        <div className="progress-track" style={{ marginTop: 16, background: 'rgba(255,255,255,0.2)' }}>
+          <div className="progress-fill" style={{ width: `${Math.min(100, Math.round(weekNum))}%`, background: '#fff' }} />
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
-          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>{logs.length} days logged</span>
-          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>Avg {avgScore}/10</span>
+          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>{logs.length} days logged</span>
+          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>Avg {avgScore}/10</span>
         </div>
       </div>
 
