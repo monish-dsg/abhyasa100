@@ -4,8 +4,7 @@ import { supabase } from '../lib/supabase'
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts'
 
 function todayIST(): string {
-  const now = new Date()
-  const ist = new Date(now.getTime() + (5.5 * 60 * 60 * 1000))
+  const now = new Date(); const ist = new Date(now.getTime() + 5.5*60*60*1000)
   return `${ist.getUTCFullYear()}-${String(ist.getUTCMonth()+1).padStart(2,'0')}-${String(ist.getUTCDate()).padStart(2,'0')}`
 }
 function addDays(date: string, days: number): string {
@@ -15,6 +14,19 @@ function addDays(date: string, days: number): string {
 function fmtD(d: string) { return new Date(d + 'T12:00:00').toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }) }
 
 const CM: Record<string, string> = { 'Green': '#34C759', 'Amber': '#FF9500', 'Red': '#FF3B30' }
+
+const HABIT_LABELS = [
+  { key: 'omad', label: 'OMAD', check: (h: any) => h?.omad },
+  { key: 'workout', label: 'Workout', check: (h: any) => h?.workout_10k || h?.physical_activity || h?.workout },
+  { key: 'clean', label: 'Clean Eating', check: (h: any) => h?.clean_eating || h?.ate_clean || h?.fast_post_4pm },
+  { key: 'meditate', label: 'Meditate', check: (h: any) => h?.meditate },
+  { key: 'manifest', label: 'Manifest', check: (h: any) => h?.manifest },
+  { key: 'sleep', label: 'Sleep Well', check: (h: any) => h?.sleep_well || h?.sleep_6hrs || (h?.sleep_hours >= 6) },
+  { key: 'sutras', label: 'YogaSutras', check: (h: any) => h?.yoga_sutras },
+  { key: 'inbox', label: 'Zero Inbox', check: (h: any) => h?.zero_inbox },
+  { key: 'content', label: 'No Content', check: (h: any) => h?.no_content || h?.zero_content },
+  { key: 'water', label: 'Hydrated', check: (h: any) => h?.hydrated || h?.water_3l || (h?.water_liters >= 3) },
+]
 
 export default function Dashboard() {
   const [logs, setLogs] = useState<any[]>([])
@@ -34,8 +46,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     supabase.from('attempts').select('*').eq('status', 'active').order('attempt_number', { ascending: false }).limit(1).then(({ data }) => {
-      const att = data?.[0]?.attempt_number || 1
-      setActiveAttempt(att); loadData(att)
+      const att = data?.[0]?.attempt_number || 1; setActiveAttempt(att); loadData(att)
     })
   }, [])
 
@@ -47,96 +58,92 @@ export default function Dashboard() {
     setActiveAttempt(newNum); await loadData(newNum); setCreating(false)
   }
 
-  const currentAttempt = attempts.find(a => a.attempt_number === activeAttempt)
-  const startDate = currentAttempt?.start_date || todayIST()
+  const ca = attempts.find(a => a.attempt_number === activeAttempt)
+  const startDate = ca?.start_date || todayIST()
   const today = todayIST()
   const dayNum = Math.max(1, Math.floor((new Date(today + 'T12:00:00').getTime() - new Date(startDate + 'T12:00:00').getTime()) / 864e5) + 1)
   const weekNum = Math.ceil(dayNum / 7)
-  const totalWeeks = 100
-  const pctWeeks = Math.min(100, Math.round((weekNum / totalWeeks) * 100))
 
-  // Weight data
+  // Weight
   const weights = logs.filter(l => l.weight > 0).map(l => ({ day: l.day, weight: l.weight }))
   const latestWeight = weights.length > 0 ? weights[weights.length - 1].weight : null
   const startWeight = weights.length > 0 ? weights[0].weight : null
   const weightData = weights.map(w => ({ day: `D${w.day}`, weight: w.weight }))
 
+  // Averages
+  const avgScore = logs.length ? Math.round((logs.reduce((a, l) => a + (l.score || 0), 0) / logs.length) * 10) / 10 : 0
+  const greenDays = logs.filter(l => l.color === 'Green').length
+  const amberDays = logs.filter(l => l.color === 'Amber').length
+  const redDays = logs.filter(l => l.color === 'Red').length
+
   // Weekly scores
   const weeklyData: { week: number, score: number, color: string, days: number }[] = []
   for (let w = 1; w <= weekNum; w++) {
-    const dayStart = (w - 1) * 7 + 1
-    const dayEnd = w * 7
-    const weekLogs = logs.filter(l => l.day >= dayStart && l.day <= dayEnd)
-    if (weekLogs.length > 0) {
-      const avgScore = weekLogs.reduce((a, l) => a + (l.score || 0), 0) / weekLogs.length
-      const pct = avgScore * 10
-      weeklyData.push({ week: w, score: Math.round(avgScore * 10) / 10, color: pct > 80 ? 'Green' : pct >= 40 ? 'Amber' : 'Red', days: weekLogs.length })
+    const wLogs = logs.filter(l => l.day >= (w-1)*7+1 && l.day <= w*7)
+    if (wLogs.length > 0) {
+      const avg = wLogs.reduce((a, l) => a + (l.score || 0), 0) / wLogs.length
+      const p = avg * 10
+      weeklyData.push({ week: w, score: Math.round(avg * 10) / 10, color: p > 80 ? 'Green' : p >= 40 ? 'Amber' : 'Red', days: wLogs.length })
     }
   }
 
-  // Per-habit daily grid (last 7 days)
+  // Recent days for habit grid
   const recentDays = Array.from({ length: Math.min(7, dayNum) }, (_, i) => dayNum - 6 + i).filter(d => d >= 1)
-  const habitRows = [
-    { key: 'omad', label: 'OMAD/Fast', check: (h: any) => h?.omad || h?.full_fast_day },
-    { key: 'physical', label: 'Physical', check: (h: any) => h?.physical_activity || (h?.steps >= 10000) || h?.workout },
-    { key: 'clean', label: 'Ate Clean', check: (h: any) => h?.ate_clean || h?.fast_post_4pm },
-    { key: 'meditate', label: 'Meditate', check: (h: any) => h?.meditate },
-    { key: 'manifest', label: 'Manifest', check: (h: any) => h?.manifest },
-    { key: 'sleep', label: 'Sleep 6h', check: (h: any) => h?.sleep_6hrs || (h?.sleep_hours >= 6) },
-    { key: 'sutras', label: 'Sutras', check: (h: any) => h?.yoga_sutras },
-    { key: 'inbox', label: 'Inbox 0', check: (h: any) => h?.zero_inbox },
-    { key: 'content', label: 'No Content', check: (h: any) => h?.zero_content },
-    { key: 'water', label: 'Water 3L', check: (h: any) => h?.water_3l || (h?.water_liters >= 3) },
-  ]
-
-  const avgScore = logs.length ? Math.round((logs.reduce((a, l) => a + (l.score || 0), 0) / logs.length) * 10) / 10 : 0
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {/* Attempt selector */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
         {attempts.map(a => (
           <button key={a.attempt_number} onClick={() => { setActiveAttempt(a.attempt_number); loadData(a.attempt_number) }}
             className={`attempt-btn ${activeAttempt === a.attempt_number ? 'attempt-active' : 'attempt-inactive'}`}>
-            Attempt {a.attempt_number}
+            #{a.attempt_number}
           </button>
         ))}
         <button onClick={createNewAttempt} disabled={creating}
-          style={{ padding: '6px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600, border: '1.5px dashed #D1D1D6', background: 'none', color: '#8E8E93', cursor: 'pointer', fontFamily: 'inherit' }}>
-          {creating ? '...' : '+ New'}
-        </button>
+          style={{ padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, border: '1.5px dashed #D1D1D6', background: 'none', color: '#8E8E93', cursor: 'pointer', fontFamily: 'inherit' }}>+</button>
       </div>
 
-      <h1 style={{ fontSize: 34, fontWeight: 700, letterSpacing: '-0.03em' }}>Abhyasa100</h1>
-
-      {/* Progress */}
-      <div className="card" style={{ padding: 16 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-          <span style={{ fontSize: 13, color: '#8E8E93' }}>Week {weekNum} of 100 · Day {dayNum}</span>
-          <span style={{ fontSize: 13, color: '#8E8E93' }}>{fmtD(startDate)} → {fmtD(addDays(startDate, 699))}</span>
+      {/* Hero */}
+      <div className="card" style={{ padding: '24px 20px', background: 'linear-gradient(135deg, #1C1C1E, #2C2C2E)' }}>
+        <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', fontWeight: 600, letterSpacing: '0.05em' }}>ABHYASA100</p>
+        <h1 style={{ fontSize: 36, fontWeight: 700, color: '#fff', letterSpacing: '-0.03em', marginTop: 4 }}>Week {weekNum} <span style={{ fontSize: 18, color: 'rgba(255,255,255,0.4)' }}>of 100</span></h1>
+        <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)', marginTop: 4 }}>Day {dayNum} · {fmtD(startDate)} → {fmtD(addDays(startDate, 699))}</p>
+        <div className="progress-track" style={{ marginTop: 16, background: 'rgba(255,255,255,0.1)' }}>
+          <div className="progress-fill" style={{ width: `${Math.min(100, Math.round(weekNum))}%`, background: 'linear-gradient(90deg, #FF2D55, #FF6482)' }} />
         </div>
-        <div className="progress-track" style={{ marginBottom: 4 }}>
-          <div className="progress-fill" style={{ width: `${pctWeeks}%`, background: 'linear-gradient(90deg, #FF2D55, #FF6482)' }} />
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
+          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>{logs.length} days logged</span>
+          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>Avg {avgScore}/10</span>
         </div>
-        <p style={{ fontSize: 12, color: '#8E8E93', textAlign: 'center' }}>{pctWeeks}% complete · {logs.length} days logged · Avg {avgScore}/10</p>
       </div>
 
-      {/* Stats */}
+      {/* Stats Row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-        <div className="stat">
-          <p style={{ fontSize: 10, fontWeight: 600, color: '#8E8E93', letterSpacing: '0.04em' }}>START</p>
-          <p style={{ fontSize: 22, fontWeight: 700 }}>{startWeight || '—'}<span style={{ fontSize: 13, color: '#8E8E93' }}>kg</span></p>
-        </div>
-        <div className="stat">
-          <p style={{ fontSize: 10, fontWeight: 600, color: '#8E8E93', letterSpacing: '0.04em' }}>NOW</p>
-          <p style={{ fontSize: 22, fontWeight: 700 }}>{latestWeight || '—'}<span style={{ fontSize: 13, color: '#8E8E93' }}>kg</span></p>
-        </div>
-        <div className="stat">
-          <p style={{ fontSize: 10, fontWeight: 600, color: '#8E8E93', letterSpacing: '0.04em' }}>LOST</p>
-          <p style={{ fontSize: 22, fontWeight: 700, color: startWeight && latestWeight ? '#34C759' : '#8E8E93' }}>
-            {startWeight && latestWeight ? `${(startWeight - latestWeight).toFixed(1)}` : '—'}<span style={{ fontSize: 13, color: '#8E8E93' }}>kg</span>
-          </p>
-        </div>
+        {[
+          { label: 'START', value: startWeight || '—', unit: 'kg', color: '#8E8E93' },
+          { label: 'NOW', value: latestWeight || '—', unit: 'kg', color: '#FF2D55' },
+          { label: 'LOST', value: startWeight && latestWeight ? (startWeight - latestWeight).toFixed(1) : '—', unit: 'kg', color: '#34C759' },
+        ].map(s => (
+          <div key={s.label} className="stat">
+            <p style={{ fontSize: 9, fontWeight: 600, color: '#AEAEB2', letterSpacing: '0.06em' }}>{s.label}</p>
+            <p style={{ fontSize: 24, fontWeight: 700, color: s.color, marginTop: 2 }}>{s.value}<span style={{ fontSize: 12, color: '#C7C7CC' }}>{s.unit}</span></p>
+          </div>
+        ))}
+      </div>
+
+      {/* Day Color Summary */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+        {[
+          { count: greenDays, bg: '#34C759', label: 'Green' },
+          { count: amberDays, bg: '#FF9500', label: 'Amber' },
+          { count: redDays, bg: '#FF3B30', label: 'Red' },
+        ].map(x => (
+          <div key={x.label} style={{ background: x.bg, borderRadius: 12, padding: '14px 8px', textAlign: 'center', color: '#fff' }}>
+            <p style={{ fontSize: 24, fontWeight: 700 }}>{x.count}</p>
+            <p style={{ fontSize: 10, fontWeight: 600, opacity: 0.8 }}>{x.label} days</p>
+          </div>
+        ))}
       </div>
 
       {/* Weight Journey */}
@@ -160,106 +167,99 @@ export default function Dashboard() {
           <p style={{ fontSize: 15, fontWeight: 600, marginBottom: 10 }}>Weekly Scores</p>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {weeklyData.map(w => (
-              <div key={w.week} style={{ background: CM[w.color], borderRadius: 8, padding: '8px 10px', textAlign: 'center', minWidth: 52 }}>
-                <p style={{ fontSize: 10, fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>W{w.week}</p>
-                <p style={{ fontSize: 16, fontWeight: 700, color: '#fff' }}>{w.score}</p>
-                <p style={{ fontSize: 9, color: 'rgba(255,255,255,0.5)' }}>{w.days}d</p>
+              <div key={w.week} style={{ background: CM[w.color], borderRadius: 10, padding: '10px 12px', textAlign: 'center', minWidth: 56 }}>
+                <p style={{ fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,0.6)', letterSpacing: '0.04em' }}>WEEK {w.week}</p>
+                <p style={{ fontSize: 20, fontWeight: 700, color: '#fff', marginTop: 2 }}>{w.score}</p>
+                <p style={{ fontSize: 9, color: 'rgba(255,255,255,0.4)' }}>{w.days} days</p>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* Per-Habit Daily Grid */}
-      <div className="card" style={{ padding: 14, overflowX: 'auto' }}>
-        <p style={{ fontSize: 15, fontWeight: 600, marginBottom: 10 }}>Last 7 Days</p>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-          <thead>
-            <tr>
-              <th style={{ textAlign: 'left', padding: '4px 6px', color: '#8E8E93', fontWeight: 600, fontSize: 10 }}></th>
-              {recentDays.map(d => (
-                <th key={d} style={{ textAlign: 'center', padding: '4px 3px', color: d === dayNum ? '#FF2D55' : '#8E8E93', fontWeight: 600, fontSize: 10 }}>
-                  D{d}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {/* Daily score row */}
-            <tr style={{ borderBottom: '1px solid rgba(60,60,67,0.12)' }}>
-              <td style={{ padding: '6px 6px', fontWeight: 600, fontSize: 11 }}>Score</td>
-              {recentDays.map(d => {
-                const log = logs.find(l => l.day === d)
-                const sc = log?.score || 0
-                const pctD = sc * 10
-                const bg = log ? (pctD > 80 ? '#34C759' : pctD >= 40 ? '#FF9500' : '#FF3B30') : '#F2F2F7'
-                return (
-                  <td key={d} style={{ textAlign: 'center', padding: '4px 2px' }}>
-                    <div style={{ background: bg, borderRadius: 4, padding: '3px 0', color: log ? '#fff' : '#C7C7CC', fontWeight: 700, fontSize: 11 }}>
-                      {log ? sc : '—'}
-                    </div>
-                  </td>
-                )
-              })}
-            </tr>
-            {/* Individual habit rows */}
-            {habitRows.map(hr => (
-              <tr key={hr.key}>
-                <td style={{ padding: '5px 6px', fontSize: 11, color: '#555' }}>{hr.label}</td>
+      {/* Habit Grid - Last 7 Days */}
+      {habits.length > 0 && (
+        <div className="card" style={{ padding: 14, overflowX: 'auto' }}>
+          <p style={{ fontSize: 15, fontWeight: 600, marginBottom: 10 }}>Last 7 Days</p>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                <th style={{ textAlign: 'left', padding: '4px 6px', color: '#AEAEB2', fontWeight: 600, fontSize: 9 }}></th>
+                {recentDays.map(d => (
+                  <th key={d} style={{ textAlign: 'center', padding: '4px 2px', color: d === dayNum ? '#FF2D55' : '#AEAEB2', fontWeight: 700, fontSize: 10 }}>D{d}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {/* Score row */}
+              <tr style={{ borderBottom: '2px solid rgba(60,60,67,0.08)' }}>
+                <td style={{ padding: '6px 6px', fontWeight: 700, fontSize: 11, color: '#FF2D55' }}>Score</td>
                 {recentDays.map(d => {
-                  const h = habits.find(hab => hab.day === d)
-                  const done = h ? hr.check(h) : null
+                  const log = logs.find(l => l.day === d)
                   return (
-                    <td key={d} style={{ textAlign: 'center', padding: '3px 2px' }}>
-                      <div style={{
-                        width: 20, height: 20, borderRadius: 4, margin: '0 auto',
-                        background: done === true ? '#34C759' : done === false ? '#FF3B30' : '#F2F2F7',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 10, color: '#fff', fontWeight: 700,
-                      }}>
-                        {done === true ? '✓' : done === false ? '✗' : ''}
+                    <td key={d} style={{ textAlign: 'center', padding: '4px 2px' }}>
+                      <div style={{ background: log ? (CM[log.color] || '#E5E5EA') : '#F2F2F7', borderRadius: 6, padding: '4px 0', color: log ? '#fff' : '#D1D1D6', fontWeight: 700, fontSize: 12 }}>
+                        {log ? log.score : '—'}
                       </div>
                     </td>
                   )
                 })}
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+              {/* Habit rows */}
+              {HABIT_LABELS.map(hr => (
+                <tr key={hr.key}>
+                  <td style={{ padding: '4px 6px', fontSize: 10, color: '#555', fontWeight: 500 }}>{hr.label}</td>
+                  {recentDays.map(d => {
+                    const h = habits.find(hab => hab.day === d)
+                    const done = h ? hr.check(h) : null
+                    return (
+                      <td key={d} style={{ textAlign: 'center', padding: '2px 2px' }}>
+                        <div style={{
+                          width: 22, height: 22, borderRadius: 6, margin: '0 auto',
+                          background: done === true ? '#34C759' : done === false ? '#FF3B30' : '#F2F2F7',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 9, color: '#fff', fontWeight: 700,
+                        }}>
+                          {done === true ? '✓' : done === false ? '✗' : ''}
+                        </div>
+                      </td>
+                    )
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
-      {/* Day Calendar */}
+      {/* Calendar */}
       <div className="card" style={{ padding: 14 }}>
         <p style={{ fontSize: 15, fontWeight: 600, marginBottom: 10 }}>Calendar</p>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 3, fontSize: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 3 }}>
           {['M','T','W','T','F','S','S'].map((d, i) => (
-            <div key={i} style={{ textAlign: 'center', color: '#8E8E93', fontWeight: 600, padding: 2 }}>{d}</div>
+            <div key={i} style={{ textAlign: 'center', color: '#AEAEB2', fontWeight: 700, padding: 2, fontSize: 9 }}>{d}</div>
           ))}
           {Array.from({ length: Math.min(dayNum, 49) }, (_, i) => i + 1).map(d => {
             const log = logs.find(l => l.day === d)
-            const bg = log ? (CM[log.color] || '#F2F2F7') : '#F2F2F7'
-            return <div key={d} style={{ background: bg, borderRadius: 4, padding: '4px 0', textAlign: 'center', color: log ? '#fff' : '#C7C7CC', fontWeight: 700, fontSize: 9 }}>{d}</div>
+            return <div key={d} style={{ background: log ? (CM[log.color] || '#F2F2F7') : '#F2F2F7', borderRadius: 5, padding: '5px 0', textAlign: 'center', color: log ? '#fff' : '#D1D1D6', fontWeight: 700, fontSize: 9 }}>{d}</div>
           })}
         </div>
       </div>
 
-      {/* Log */}
+      {/* Recent Log */}
       <div className="card" style={{ overflow: 'hidden' }}>
-        <p style={{ fontSize: 15, fontWeight: 600, padding: '12px 16px', borderBottom: '0.5px solid rgba(60,60,67,0.12)' }}>Log</p>
-        {logs.length === 0 ? <p style={{ padding: 24, textAlign: 'center', color: '#8E8E93', fontSize: 15 }}>No entries yet</p> :
-          [...logs].reverse().slice(0, 14).map(l => {
-            const calcDate = addDays(startDate, l.day - 1)
-            return (
-              <div key={l.id} className="log-row">
-                <div>
-                  <span style={{ fontSize: 15, fontWeight: 600 }}>Day {l.day}</span>
-                  <span style={{ fontSize: 12, color: '#8E8E93', marginLeft: 8 }}>{fmtD(calcDate)}</span>
-                  {l.weight > 0 && <span style={{ fontSize: 12, color: '#8E8E93', marginLeft: 8 }}>{l.weight}kg</span>}
-                </div>
-                <span className="badge" style={{ background: CM[l.color] || '#E5E5EA' }}>{l.score}/10</span>
+        <p style={{ fontSize: 15, fontWeight: 600, padding: '12px 16px', borderBottom: '0.5px solid rgba(60,60,67,0.12)' }}>Recent</p>
+        {logs.length === 0 ? <p style={{ padding: 24, textAlign: 'center', color: '#8E8E93' }}>No entries yet. Go to Add and log Day 1!</p> :
+          [...logs].reverse().slice(0, 10).map(l => (
+            <div key={l.id} className="log-row">
+              <div>
+                <span style={{ fontSize: 15, fontWeight: 600 }}>Day {l.day}</span>
+                <span style={{ fontSize: 12, color: '#8E8E93', marginLeft: 8 }}>{fmtD(addDays(startDate, l.day - 1))}</span>
+                {l.weight > 0 && <span style={{ fontSize: 12, color: '#AEAEB2', marginLeft: 6 }}>{l.weight}kg</span>}
               </div>
-            )
-          })
+              <span className="badge" style={{ background: CM[l.color] || '#E5E5EA', fontSize: 12, padding: '3px 10px' }}>{l.score}/10</span>
+            </div>
+          ))
         }
       </div>
     </div>
