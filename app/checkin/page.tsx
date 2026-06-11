@@ -94,9 +94,9 @@ export default function AddPage() {
         omad: h.omad ?? false, full_fast_day: h.full_fast_day ?? false,
         physical_activity: h.physical_activity ?? false, ate_clean: h.fast_post_4pm ?? h.ate_clean ?? false,
         meditate: h.meditate ?? false, manifest: h.manifest ?? false,
-        sleep_6hrs: h.sleep_6hrs ?? (h.sleep_hours >= 6) ?? false,
+        sleep_6hrs: h.sleep_6hrs ?? (h.sleep_hours ? h.sleep_hours >= 6 : false),
         yoga_sutras: h.yoga_sutras ?? false, zero_inbox: h.zero_inbox ?? false,
-        zero_content: h.zero_content ?? false, water_3l: h.water_3l ?? (h.water_liters >= 3) ?? false,
+        zero_content: h.zero_content ?? false, water_3l: h.water_3l ?? (h.water_liters ? h.water_liters >= 3 : false),
         weight: l?.weight ? String(l.weight) : '',
       })
     } else {
