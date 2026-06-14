@@ -136,17 +136,29 @@ export default function AddPage() {
     setUpdating(true)
     const d = dayNum; const date = dayDate(startDate, d)
     const { score, color } = calcScore(form)
-    const { data: ex } = await supabase.from('daily_logs').select('id').eq('day', d).eq('attempt_id', attemptId).single()
-    if (ex) { await supabase.from('daily_logs').update({ score, color, weight: +form.weight || 0 }).eq('day', d).eq('attempt_id', attemptId) }
-    else { await supabase.from('daily_logs').insert({ day: d, date, attempt_id: attemptId, weight: +form.weight || 0, score, color }) }
-    // Save all habits
-    await supabase.from('habits').upsert({
+    
+    // Get existing weight so we don't overwrite it
+    const { data: existingLog } = await supabase.from('daily_logs').select('weight').eq('day', d).eq('attempt_id', attemptId).single()
+    const w = +form.weight || existingLog?.weight || 0
+
+    // Upsert daily_log with score and color
+    const { error: logErr } = await supabase.from('daily_logs').upsert({
+      day: d, date, attempt_id: attemptId, weight: w, score, color
+    }, { onConflict: 'day,attempt_id' } as any)
+    
+    if (logErr) console.error('Log save error:', logErr)
+
+    // Upsert all habits
+    const { error: habErr } = await supabase.from('habits').upsert({
       day: d, attempt_id: attemptId,
       omad: form.omad, workout_10k: form.workout_10k, clean_eating: form.clean_eating,
       meditate: form.meditate, manifest: form.manifest, sleep_well: form.sleep_well,
       yoga_sutras: form.yoga_sutras, zero_inbox: form.zero_inbox,
       no_content: form.no_content, hydrated: form.hydrated,
     }, { onConflict: 'day,attempt_id' } as any)
+    
+    if (habErr) console.error('Habit save error:', habErr)
+
     await refreshDayColors()
     setDayUpdated(true); setUpdating(false)
   }
