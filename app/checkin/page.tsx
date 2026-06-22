@@ -107,6 +107,19 @@ export default function AddPage() {
 
   const f = (k: string, v: any) => { setForm(p => ({ ...p, [k]: v })); setSavedItems(p => ({ ...p, [k]: false })); setDayUpdated(false) }
 
+  // Recalculate and save score to daily_logs
+  const recalcScore = async () => {
+    const d = dayNum; const date = dayDate(startDate, d)
+    const { score, color } = calcScore(form)
+    const { data: ex } = await supabase.from('daily_logs').select('id, weight').eq('day', d).eq('attempt_id', attemptId).single()
+    if (ex) {
+      await supabase.from('daily_logs').update({ score, color }).eq('day', d).eq('attempt_id', attemptId)
+    } else {
+      await supabase.from('daily_logs').insert({ day: d, date, attempt_id: attemptId, weight: 0, score, color })
+    }
+    setExistingDays(p => ({ ...p, [d]: color }))
+  }
+
   // Save individual item
   const saveItem = async (key: string) => {
     const d = dayNum; const date = dayDate(startDate, d)
@@ -121,6 +134,8 @@ export default function AddPage() {
       await supabase.from('habits').insert({ day: d, attempt_id: attemptId, [key]: form[key] })
     }
     setSavedItems(p => ({ ...p, [key]: true }))
+    // Auto-update score
+    await recalcScore()
   }
 
   const saveWeight = async () => {
@@ -129,6 +144,8 @@ export default function AddPage() {
     if (ex) { await supabase.from('daily_logs').update({ weight: +form.weight || 0 }).eq('day', d).eq('attempt_id', attemptId) }
     else { await supabase.from('daily_logs').insert({ day: d, date, attempt_id: attemptId, weight: +form.weight || 0 }) }
     setSavedItems(p => ({ ...p, weight: true }))
+    // Auto-update score
+    await recalcScore()
   }
 
   // Update Day - calculates score and color
