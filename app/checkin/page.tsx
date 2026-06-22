@@ -222,7 +222,7 @@ export default function AddPage() {
           <button className="day-btn" onClick={() => goDay(dayNum + 1)}>›</button>
         </div>
         <div style={{ padding: '0 12px 10px', display: 'flex', flexWrap: 'wrap', gap: 3, borderTop: '0.5px solid rgba(60,60,67,0.12)', paddingTop: 8 }}>
-          {Array.from({ length: Math.min(todayDayNum, 21) }, (_, i) => todayDayNum - 20 + i).filter(d => d >= 1).map(d => {
+          {Array.from({ length: Math.min(todayDayNum, 21) }, (_, i) => Math.max(1, todayDayNum - 20) + i).filter(d => d >= 1 && d <= todayDayNum).map(d => {
             const c = existingDays[d]
             const cMap: Record<string, string> = { 'Green': '#34C759', 'Amber': '#FF9500', 'Red': '#FF3B30' }
             return (
