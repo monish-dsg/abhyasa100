@@ -220,10 +220,10 @@ export default function AddPage() {
             const cMap: Record<string, string> = { 'Green': '#34C759', 'Amber': '#FF9500', 'Red': '#FF3B30' }
             return (
               <button key={d} onClick={() => goDay(d)} style={{
-                padding: '2px 7px', borderRadius: 5, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
-                border: d === todayDayNum && d !== dayNum ? '1.5px solid #FF2D55' : 'none',
-                background: d === dayNum ? '#FF2D55' : c ? (cMap[c] || '#F2F2F7') : '#F2F2F7',
-                color: d === dayNum ? '#fff' : c ? '#fff' : '#D1D1D6',
+                padding: '4px 9px', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+                border: d === todayDayNum && d !== dayNum ? '2px solid #FF2D55' : '1px solid ' + (c ? 'transparent' : '#E5E5EA'),
+                background: d === dayNum ? '#FF2D55' : c ? (cMap[c] || '#F2F2F7') : '#FFFFFF',
+                color: d === dayNum ? '#fff' : c ? '#fff' : '#8E8E93',
               }}>{d}</button>
             )
           })}
