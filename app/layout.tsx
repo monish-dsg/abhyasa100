@@ -1,27 +1,18 @@
-import type { Metadata, Viewport } from 'next'
-import './globals.css'
+-- Delete all previous data
+DELETE FROM chat_messages;
+DELETE FROM habits;
+DELETE FROM photos;
+DELETE FROM daily_logs;
+DELETE FROM attempts;
 
-export const metadata: Metadata = { title: 'Abhyasa100', description: '100 Week Discipline Challenge' }
-export const viewport: Viewport = { width: 'device-width', initialScale: 1, maximumScale: 1, userScalable: false }
+-- Add weekly tracking columns to habits
+ALTER TABLE habits ADD COLUMN IF NOT EXISTS meals_count INT DEFAULT 0;
+ALTER TABLE habits ADD COLUMN IF NOT EXISTS steps_total INT DEFAULT 0;
+ALTER TABLE habits ADD COLUMN IF NOT EXISTS workouts_count INT DEFAULT 0;
+ALTER TABLE habits ADD COLUMN IF NOT EXISTS meditate_count INT DEFAULT 0;
+ALTER TABLE habits ADD COLUMN IF NOT EXISTS manifest_count INT DEFAULT 0;
+ALTER TABLE habits ADD COLUMN IF NOT EXISTS sleep_total_hours FLOAT DEFAULT 0;
+ALTER TABLE habits ADD COLUMN IF NOT EXISTS content_hours FLOAT DEFAULT 0;
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="en">
-      <body>
-        <nav className="nav-wrap">
-          <div className="nav-inner">
-            <a href="/" className="nav-logo">🧘 Abhyasa</a>
-            <div className="nav-links">
-              <a href="/" className="nav-link">Home</a>
-              <a href="/checkin" className="nav-link">Add</a>
-              <a href="/habits" className="nav-link">Habits</a>
-              <a href="/yogi" className="nav-link">Yogi</a>
-              <a href="/sutras" className="nav-link">Sutras</a>
-            </div>
-          </div>
-        </nav>
-        <main style={{ maxWidth: 640, margin: '0 auto', padding: '16px 16px 40px' }}>{children}</main>
-      </body>
-    </html>
-  )
-}
+-- Create fresh attempt - Week 1 starts today (Monday)
+INSERT INTO attempts (attempt_number, start_date, status, notes) VALUES (1, CURRENT_DATE, 'active', '100 weeks - weekly tracking');
