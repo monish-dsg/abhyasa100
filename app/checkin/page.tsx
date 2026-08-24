@@ -51,9 +51,6 @@ export default function AddPage() {
   const [dayUpdated, setDayUpdated] = useState(false)
   const [updating, setUpdating] = useState(false)
   const [dayColors, setDayColors] = useState<Record<number, string>>({})
-  const [photos, setPhotos] = useState<Record<string, File | null>>({ scale: null, selfie: null })
-  const [previews, setPreviews] = useState<Record<string, string>>({ scale: '', selfie: '' })
-  const [existing, setExisting] = useState<Record<string, string>>({ scale: '', selfie: '' })
 
   useEffect(() => {
     (async () => {
@@ -73,13 +70,6 @@ export default function AddPage() {
   const refreshColors = async (aid?: number) => {
     const { data: dl } = await supabase.from('daily_logs').select('day, color').eq('attempt_id', aid || attemptId).order('day')
     if (dl) { const dc: Record<number, string> = {}; dl.forEach(d => { dc[d.day] = d.color || '' }); setDayColors(dc) }
-  }
-
-  const loadPhotos = async (d: number, aid: number) => {
-    const { data } = await supabase.from('photos').select('*').eq('day', d).eq('attempt_id', aid)
-    const ep: Record<string, string> = { scale: '', selfie: '' }
-    if (data) data.forEach((p: any) => { if (ep.hasOwnProperty(p.type)) ep[p.type] = p.photo_url + '?t=' + Date.now() })
-    setExisting(ep)
   }
 
   const loadDay = async (d: number, aid?: number) => {
@@ -105,8 +95,6 @@ export default function AddPage() {
       if (l?.weight) saved.weight = true
     }
     setSavedItems(saved); setDayUpdated(!!l?.score)
-    await loadPhotos(d, a)
-    setPhotos({ scale: null, selfie: null }); setPreviews({ scale: '', selfie: '' })
   }
 
   const goDay = (d: number) => { if (d >= 1 && d <= 700) { setDayNum(d); loadDay(d); setDayUpdated(false) } }
@@ -147,25 +135,6 @@ export default function AddPage() {
     } catch (e) { console.error('saveWeight:', e) }
   }
 
-  const savePhoto = async (type: string) => {
-    const file = photos[type]; if (!file) return
-    const d = dayNum; const date = dayDate(startDate, d)
-    try {
-      const ext = file.name.split('.').pop() || 'jpg'
-      const fp = `day-${d}/${type}.${ext}`
-      await supabase.storage.from('photos').upload(fp, file, { upsert: true })
-      const { data: u } = supabase.storage.from('photos').getPublicUrl(fp)
-      const { data: logRows } = await supabase.from('daily_logs').select('id').eq('day', d).eq('attempt_id', attemptId)
-      if (!logRows || logRows.length === 0) await supabase.from('daily_logs').insert({ day: d, date, attempt_id: attemptId, weight: 0 })
-      const { data: ex } = await supabase.from('photos').select('id').eq('day', d).eq('type', type).eq('attempt_id', attemptId)
-      if (ex && ex.length > 0) await supabase.from('photos').update({ photo_url: u.publicUrl }).eq('id', ex[0].id)
-      else await supabase.from('photos').insert({ day: d, date, type, photo_url: u.publicUrl, caption: type, attempt_id: attemptId })
-      await loadPhotos(d, attemptId)
-      setPhotos(p => ({ ...p, [type]: null })); setPreviews(p => ({ ...p, [type]: '' }))
-      setSavedItems(p => ({ ...p, [`photo-${type}`]: true }))
-    } catch (e) { console.error('savePhoto:', e) }
-  }
-
   const updateDay = async () => {
     setUpdating(true)
     const d = dayNum; const date = dayDate(startDate, d)
@@ -193,7 +162,6 @@ export default function AddPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
         <div>
           <h1 style={{ fontSize: 34, fontWeight: 700, letterSpacing: '-0.03em' }}>Day {dayNum}</h1>
@@ -209,7 +177,6 @@ export default function AddPage() {
         <div className="progress-fill" style={{ width: `${pct}%`, background: colorMap[color] || '#E5E5EA', borderRadius: 4 }} />
       </div>
 
-      {/* Day Selector */}
       <div className="card">
         <div className="day-sel">
           <button className="day-btn" onClick={() => goDay(dayNum - 1)}>‹</button>
@@ -230,7 +197,6 @@ export default function AddPage() {
         </div>
       </div>
 
-      {/* Weight */}
       <div className="card">
         <div className="row">
           <div className="row-icon" style={{ background: 'rgba(255,149,0,0.12)' }}>⚖️</div>
@@ -244,29 +210,6 @@ export default function AddPage() {
         </div>
       </div>
 
-      {/* Photos */}
-      <p className="gh">Daily Photos</p>
-      <div className="card">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, padding: '10px 16px 14px' }}>
-          {[{ k: 'scale', l: 'Scale', i: '⚖️' }, { k: 'selfie', l: 'Me Today', i: '🤳' }].map(({ k, l, i }) => (
-            <div key={k}>
-              <label style={{ cursor: 'pointer', display: 'block' }}>
-                <div className="photo-box" style={{ border: previews[k] ? '2px solid #34C759' : existing[k] ? '2px solid #34C75966' : '1.5px dashed #D1D1D6' }}>
-                  {(previews[k] || existing[k]) ? <img src={previews[k] || existing[k]} alt={l} /> : <><span style={{ fontSize: 28 }}>{i}</span><span style={{ fontSize: 11, color: '#8E8E93', marginTop: 4 }}>{l}</span></>}
-                </div>
-                <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { const file = e.target.files?.[0]; if (file) { setPhotos(p => ({ ...p, [k]: file })); setPreviews(p => ({ ...p, [k]: URL.createObjectURL(file) })) } }} />
-              </label>
-              {(previews[k] || photos[k]) && (
-                <div style={{ display: 'flex', justifyContent: 'center', marginTop: 4 }}>
-                  {savedItems[`photo-${k}`] ? <span className="item-saved">✓</span> : <button className="item-save" onClick={() => savePhoto(k)}>Save</button>}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Must Have's */}
       <p className="gh">Must Have&apos;s · 70%</p>
       <div className="card">
         {MUST.map(h => (
@@ -286,7 +229,6 @@ export default function AddPage() {
         ))}
       </div>
 
-      {/* Bonus */}
       <p className="gh">Bonus · 30%</p>
       <div className="card">
         {BONUS.map(h => (
@@ -303,7 +245,6 @@ export default function AddPage() {
         ))}
       </div>
 
-      {/* Update Day */}
       <button onClick={updateDay} disabled={updating} className="save-all" style={{
         marginTop: 6, opacity: updating ? 0.5 : 1,
         background: dayUpdated ? (colorMap[color] || '#FF2D55') : 'linear-gradient(135deg, #FF2D55, #FF6482)',
