@@ -9,10 +9,24 @@ const PADAS = [
   { ch: 4, name: 'Kaivalya Pada', desc: 'Chapter of Liberation', count: 34 },
 ]
 
+const VBT_SECTIONS: Record<string, string> = {
+  'VBT.1': 'Breath Techniques',
+  'VBT.8': 'Space & Void',
+  'VBT.13': 'Sensation & Body',
+  'VBT.18': 'Desire & Emotion',
+  'VBT.23': 'Sound Techniques',
+  'VBT.27': 'Visual & Imagination',
+  'VBT.31': 'Daily Life',
+  'VBT.38': 'Awareness Techniques',
+  'VBT.43': 'Advanced Consciousness',
+  'VBT.46': 'The Nature of Reality',
+}
+
 export default function Sutras() {
-  const [tab, setTab] = useState<'volumes' | 'padas'>('padas')
+  const [tab, setTab] = useState<'padas' | 'volumes' | 'vbt'>('padas')
   const [sutras, setSutras] = useState<any[]>([])
   const [padas, setPadas] = useState<any[]>([])
+  const [vbt, setVbt] = useState<any[]>([])
   const [selVolume, setSelVolume] = useState<any>(null)
   const [selChapter, setSelChapter] = useState<number | null>(null)
 
@@ -20,14 +34,20 @@ export default function Sutras() {
     supabase.from('yoga_sutras').select('*').order('volume').then(({ data }) => { if (data) setSutras(data) })
     supabase.from('sutra_padas').select('*').order('chapter').then(({ data }) => {
       if (data) {
-        // Sort numerically by sutra number (1.1, 1.2, ... 1.10, 1.11)
         data.sort((a: any, b: any) => {
           if (a.chapter !== b.chapter) return a.chapter - b.chapter
           const aN = parseFloat(a.sutra_number.split('.').pop() || '0')
           const bN = parseFloat(b.sutra_number.split('.').pop() || '0')
           return aN - bN
         })
-        setPadas(data)
+        setPadas(data.filter(s => s.chapter <= 4))
+        const vbtData = data.filter(s => s.chapter === 5)
+        vbtData.sort((a: any, b: any) => {
+          const aNum = parseFloat(a.sutra_number.replace('VBT.', ''))
+          const bNum = parseFloat(b.sutra_number.replace('VBT.', ''))
+          return aNum - bNum
+        })
+        setVbt(vbtData)
       }
     })
   }, [])
@@ -45,47 +65,49 @@ export default function Sutras() {
 
   const chapterSutras = selChapter ? padas.filter(p => p.chapter === selChapter) : []
 
+  // Get VBT intro (VBT.0) and dharanas (VBT.1+)
+  const vbtIntro = vbt.find(v => v.sutra_number === 'VBT.0')
+  const vbtDharanas = vbt.filter(v => v.sutra_number !== 'VBT.0')
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <h1 style={{ fontSize: 34, fontWeight: 700, letterSpacing: '-0.03em' }}>Yoga Sutras</h1>
-      <p style={{ fontSize: 15, color: '#8E8E93', marginTop: -8 }}>Patanjali · 196 Sutras · 4 Chapters</p>
+      <p style={{ fontSize: 15, color: '#8E8E93', marginTop: -8 }}>Patanjali · 196 Sutras · Shiva · 112 Dharanas</p>
 
       {/* Tab selector */}
       <div style={{ display: 'flex', gap: 4, background: '#E5E5EA', borderRadius: 10, padding: 3 }}>
-        <button onClick={() => setTab('padas')} style={{
-          flex: 1, padding: '8px 0', borderRadius: 8, border: 'none', fontSize: 14, fontWeight: 600,
-          background: tab === 'padas' ? '#fff' : 'transparent', color: tab === 'padas' ? '#000' : '#8E8E93',
-          cursor: 'pointer', fontFamily: 'inherit', boxShadow: tab === 'padas' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-        }}>4 Padas</button>
-        <button onClick={() => setTab('volumes')} style={{
-          flex: 1, padding: '8px 0', borderRadius: 8, border: 'none', fontSize: 14, fontWeight: 600,
-          background: tab === 'volumes' ? '#fff' : 'transparent', color: tab === 'volumes' ? '#000' : '#8E8E93',
-          cursor: 'pointer', fontFamily: 'inherit', boxShadow: tab === 'volumes' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-        }}>10 Volumes</button>
+        {[
+          { key: 'padas' as const, label: '4 Padas' },
+          { key: 'volumes' as const, label: '10 Volumes' },
+          { key: 'vbt' as const, label: 'VBT' },
+        ].map(t => (
+          <button key={t.key} onClick={() => { setTab(t.key); setSelChapter(null) }} style={{
+            flex: 1, padding: '8px 0', borderRadius: 8, border: 'none', fontSize: 13, fontWeight: 600,
+            background: tab === t.key ? '#fff' : 'transparent', color: tab === t.key ? '#000' : '#8E8E93',
+            cursor: 'pointer', fontFamily: 'inherit', boxShadow: tab === t.key ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+          }}>{t.label}</button>
+        ))}
       </div>
 
-      {/* PADAS TAB */}
+      {/* PADAS TAB - Chapter List */}
       {tab === 'padas' && !selChapter && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {PADAS.map(p => {
-            const loaded = padas.filter(s => s.chapter === p.ch).length
-            return (
-              <div key={p.ch} onClick={() => setSelChapter(p.ch)} className="card" style={{ padding: 16, cursor: 'pointer' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <p style={{ fontSize: 11, fontWeight: 600, color: '#FF2D55', letterSpacing: '0.04em', marginBottom: 4 }}>CHAPTER {p.ch}</p>
-                    <p style={{ fontSize: 17, fontWeight: 600 }}>{p.name}</p>
-                    <p style={{ fontSize: 13, color: '#8E8E93', marginTop: 2 }}>{p.desc} · {p.count} sutras</p>
-                  </div>
-                  <span style={{ fontSize: 20, color: '#C7C7CC' }}>›</span>
+          {PADAS.map(p => (
+            <div key={p.ch} onClick={() => setSelChapter(p.ch)} className="card" style={{ padding: 16, cursor: 'pointer' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <p style={{ fontSize: 11, fontWeight: 600, color: '#FF2D55', letterSpacing: '0.04em', marginBottom: 4 }}>CHAPTER {p.ch}</p>
+                  <p style={{ fontSize: 17, fontWeight: 600 }}>{p.name}</p>
+                  <p style={{ fontSize: 13, color: '#8E8E93', marginTop: 2 }}>{p.desc} · {p.count} sutras</p>
                 </div>
+                <span style={{ fontSize: 20, color: '#C7C7CC' }}>›</span>
               </div>
-            )
-          })}
+            </div>
+          ))}
         </div>
       )}
 
-      {/* CHAPTER VIEW - scrollable reading */}
+      {/* PADAS TAB - Chapter Reading */}
       {tab === 'padas' && selChapter && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <button onClick={() => setSelChapter(null)} style={{ background: 'none', border: 'none', color: '#FF2D55', fontSize: 15, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', padding: '4px 0' }}>
@@ -97,17 +119,13 @@ export default function Sutras() {
             <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>{PADAS[selChapter - 1]?.desc} · {chapterSutras.length} sutras</p>
           </div>
           {chapterSutras.length === 0 ? (
-            <div className="card" style={{ padding: '32px 16px', textAlign: 'center' }}>
-              <p style={{ color: '#8E8E93' }}>No sutras loaded yet for this chapter</p>
-            </div>
+            <div className="card" style={{ padding: '32px 16px', textAlign: 'center' }}><p style={{ color: '#8E8E93' }}>No sutras loaded yet</p></div>
           ) : (
             <div className="card sutra-reader">
               {chapterSutras.map((s, i) => (
                 <div key={s.id} style={{ marginBottom: 32, paddingBottom: i < chapterSutras.length - 1 ? 32 : 0, borderBottom: i < chapterSutras.length - 1 ? '0.5px solid rgba(60,60,67,0.12)' : 'none' }}>
                   <p style={{ fontSize: 12, fontWeight: 600, color: '#FF2D55', letterSpacing: '0.04em', marginBottom: 8 }}>SUTRA {s.sutra_number}</p>
-                  <p style={{ fontSize: 18, fontWeight: 600, fontStyle: 'italic', color: '#333', lineHeight: 1.5, marginBottom: 12 }}>
-                    {s.sanskrit}
-                  </p>
+                  <p style={{ fontSize: 18, fontWeight: 600, fontStyle: 'italic', color: '#333', lineHeight: 1.5, marginBottom: 12 }}>{s.sanskrit}</p>
                   {s.word_meanings && (
                     <div style={{ background: 'rgba(255,45,85,0.04)', borderLeft: '3px solid #FF2D55', borderRadius: '0 8px 8px 0', padding: '10px 14px', marginBottom: 12 }}>
                       {s.word_meanings.split(';').map((w: string, j: number) => (
@@ -149,6 +167,53 @@ export default function Sutras() {
                 )}
               </div>
             ))
+          )}
+        </div>
+      )}
+
+      {/* VBT TAB */}
+      {tab === 'vbt' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {/* VBT Intro */}
+          <div className="card" style={{ padding: '16px 20px', background: 'linear-gradient(135deg, #5856D6, #7B79E8)' }}>
+            <p style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.7)', letterSpacing: '0.04em' }}>VIJNANA BHAIRAVA TANTRA</p>
+            <p style={{ fontSize: 20, fontWeight: 700, color: '#fff', marginTop: 4 }}>112 Ways to the Divine</p>
+            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', marginTop: 6, lineHeight: 1.6 }}>
+              A conversation between Shiva and Devi. She asks: &ldquo;What is your true nature?&rdquo; He responds with 112 meditation techniques — practical doorways that can be practiced anywhere, anytime.
+            </p>
+          </div>
+
+          {vbtDharanas.length === 0 ? (
+            <div className="card" style={{ padding: '32px 16px', textAlign: 'center' }}><p style={{ color: '#8E8E93' }}>No dharanas loaded yet. Run the VBT SQL in Supabase.</p></div>
+          ) : (
+            <div className="card sutra-reader">
+              {vbtDharanas.map((s, i) => {
+                const sectionTitle = VBT_SECTIONS[s.sutra_number]
+                return (
+                  <div key={s.id}>
+                    {sectionTitle && (
+                      <div style={{ textAlign: 'center', margin: i > 0 ? '28px 0 20px' : '8px 0 20px', padding: '10px 0', borderTop: i > 0 ? '1px solid rgba(88,86,214,0.15)' : 'none' }}>
+                        <p style={{ fontSize: 11, fontWeight: 700, color: '#5856D6', letterSpacing: '0.08em' }}>{sectionTitle.toUpperCase()}</p>
+                      </div>
+                    )}
+                    <div style={{ marginBottom: 28, paddingBottom: 28, borderBottom: '0.5px solid rgba(60,60,67,0.08)' }}>
+                      <p style={{ fontSize: 12, fontWeight: 600, color: '#5856D6', letterSpacing: '0.04em', marginBottom: 8 }}>
+                        {s.sutra_number.replace('VBT.', 'DHARANA ')}
+                      </p>
+                      <p style={{ fontSize: 17, fontWeight: 600, fontStyle: 'italic', color: '#333', lineHeight: 1.5, marginBottom: 12 }}>{s.sanskrit}</p>
+                      {s.word_meanings && (
+                        <div style={{ background: 'rgba(88,86,214,0.04)', borderLeft: '3px solid #5856D6', borderRadius: '0 8px 8px 0', padding: '10px 14px', marginBottom: 12 }}>
+                          {s.word_meanings.split(';').map((w: string, j: number) => (
+                            <p key={j} style={{ fontSize: 13, color: '#666', lineHeight: 1.5, marginBottom: 1 }}>{w.trim()}</p>
+                          ))}
+                        </div>
+                      )}
+                      <p style={{ fontSize: 16, lineHeight: 1.85, color: '#333' }}>{s.commentary}</p>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
           )}
         </div>
       )}
