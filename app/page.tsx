@@ -65,24 +65,42 @@ export default function Dashboard() {
   const dayNum = Math.max(1, Math.floor((new Date(today + 'T12:00:00').getTime() - new Date(startDate + 'T12:00:00').getTime()) / 864e5) + 1)
   const weekNum = Math.ceil(dayNum / 7)
 
-  const weights = logs.filter(l => l.weight > 0).map(l => ({ day: l.day, weight: l.weight }))
+  // Calculate score from habits (source of truth)
+  function calcScore(h: any): { score: number, color: string } {
+    if (!h) return { score: 0, color: 'Red' }
+    const must = [h.omad, h.workout_10k, h.clean_eating].filter(Boolean).length
+    const bonus = [h.meditate, h.manifest, h.sleep_well, h.yoga_sutras, h.zero_inbox, h.no_content, h.hydrated].filter(Boolean).length
+    const score = Math.round(((must / 3) * 7 + (bonus / 7) * 3) * 10) / 10
+    const pct = score * 10
+    const color = pct > 80 ? 'Green' : pct >= 40 ? 'Amber' : 'Red'
+    return { score, color }
+  }
+
+  // Build merged data: each day gets its score calculated from habits
+  const dayData = logs.map(l => {
+    const h = habits.find(hab => hab.day === l.day)
+    const { score, color } = h ? calcScore(h) : { score: l.score || 0, color: l.color || 'Red' }
+    return { ...l, score, color }
+  })
+
+  const weights = dayData.filter(l => l.weight > 0).map(l => ({ day: l.day, weight: l.weight }))
   const latestWeight = weights.length > 0 ? weights[weights.length - 1].weight : null
   const startWeight = weights.length > 0 ? weights[0].weight : null
   const weightData = weights.map(w => ({ day: `D${w.day}`, weight: w.weight }))
 
-  const avgScore = logs.length ? Math.round((logs.reduce((a, l) => a + (l.score || 0), 0) / logs.length) * 10) / 10 : 0
-  const greenD = logs.filter(l => l.color === 'Green').length
-  const amberD = logs.filter(l => l.color === 'Amber').length
-  const redD = logs.filter(l => l.color === 'Red').length
+  const avgScore = dayData.length ? Math.round((dayData.reduce((a, l) => a + (l.score || 0), 0) / dayData.length) * 10) / 10 : 0
+  const greenD = dayData.filter(l => l.color === 'Green').length
+  const amberD = dayData.filter(l => l.color === 'Amber').length
+  const redD = dayData.filter(l => l.color === 'Red').length
 
-  // Weekly scores
+  // Weekly scores - calculated from habits
   const weeklyData: { week: number, score: number, color: string, days: number }[] = []
   for (let w = 1; w <= weekNum; w++) {
-    const wLogs = logs.filter(l => l.day >= (w-1)*7+1 && l.day <= w*7)
-    if (wLogs.length > 0) {
-      const avg = wLogs.reduce((a, l) => a + (l.score || 0), 0) / wLogs.length
+    const wDays = dayData.filter(l => l.day >= (w-1)*7+1 && l.day <= w*7)
+    if (wDays.length > 0) {
+      const avg = wDays.reduce((a, l) => a + (l.score || 0), 0) / wDays.length
       const p = avg * 10
-      weeklyData.push({ week: w, score: Math.round(avg * 10) / 10, color: p > 80 ? 'Green' : p >= 40 ? 'Amber' : 'Red', days: wLogs.length })
+      weeklyData.push({ week: w, score: Math.round(avg * 10) / 10, color: p > 80 ? 'Green' : p >= 40 ? 'Amber' : 'Red', days: wDays.length })
     }
   }
 
@@ -107,7 +125,7 @@ export default function Dashboard() {
           <div className="progress-fill" style={{ width: `${Math.min(100, weekNum)}%`, background: '#fff' }} />
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
-          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>{logs.length} days logged</span>
+          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>{dayData.length} days logged</span>
           <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>Avg {avgScore}/10</span>
         </div>
       </div>
@@ -171,7 +189,7 @@ export default function Dashboard() {
               <tr style={{ borderBottom: '2px solid rgba(60,60,67,0.08)' }}>
                 <td style={{ padding: '6px 6px', fontWeight: 700, fontSize: 11, color: '#FF2D55' }}>Score</td>
                 {recentDays.map(d => {
-                  const log = logs.find(l => l.day === d)
+                  const log = dayData.find(l => l.day === d)
                   return (<td key={d} style={{ textAlign: 'center', padding: '4px 2px' }}><div style={{ background: log ? (CM[log.color] || '#E5E5EA') : '#F2F2F7', borderRadius: 6, padding: '4px 0', color: log ? '#fff' : '#D1D1D6', fontWeight: 700, fontSize: 12 }}>{log?.score || '—'}</div></td>)
                 })}
               </tr>
@@ -193,7 +211,7 @@ export default function Dashboard() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 3 }}>
           {['M','T','W','T','F','S','S'].map((d, i) => (<div key={i} style={{ textAlign: 'center', color: '#AEAEB2', fontWeight: 700, padding: 2, fontSize: 9 }}>{d}</div>))}
           {Array.from({ length: Math.min(dayNum, 49) }, (_, i) => i + 1).map(d => {
-            const log = logs.find(l => l.day === d)
+            const log = dayData.find(l => l.day === d)
             return <div key={d} style={{ background: log ? (CM[log.color] || '#F2F2F7') : '#F2F2F7', borderRadius: 5, padding: '5px 0', textAlign: 'center', color: log ? '#fff' : '#D1D1D6', fontWeight: 700, fontSize: 9 }}>{d}</div>
           })}
         </div>
@@ -201,8 +219,8 @@ export default function Dashboard() {
 
       <div className="card" style={{ overflow: 'hidden' }}>
         <p style={{ fontSize: 15, fontWeight: 600, padding: '12px 16px', borderBottom: '0.5px solid rgba(60,60,67,0.12)' }}>Recent</p>
-        {logs.length === 0 ? <p style={{ padding: 24, textAlign: 'center', color: '#8E8E93' }}>No entries yet</p> :
-          [...logs].reverse().slice(0, 10).map(l => (
+        {dayData.length === 0 ? <p style={{ padding: 24, textAlign: 'center', color: '#8E8E93' }}>No entries yet</p> :
+          [...dayData].reverse().slice(0, 10).map(l => (
             <div key={l.id} className="log-row">
               <div>
                 <span style={{ fontSize: 15, fontWeight: 600 }}>Day {l.day}</span>
