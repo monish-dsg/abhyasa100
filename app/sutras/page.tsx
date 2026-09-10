@@ -48,7 +48,7 @@ export default function Sutras() {
         const vbtData = data.filter(s => s.chapter === 5); vbtData.sort(sortByNum); setVbt(vbtData)
         const gitaData = data.filter(s => s.chapter === 7); gitaData.sort(sortByNum); setGita(gitaData)
         const agData = data.filter(s => s.chapter === 6); agData.sort(sortByNum); setAshtavakra(agData)
-        const upData = data.filter(s => s.chapter === 8); upData.sort(sortByNum); setUpanishads(upData)
+        const upData = data.filter(s => s.chapter >= 8 && s.chapter <= 11); upData.sort((a: any, b: any) => { if (a.chapter !== b.chapter) return a.chapter - b.chapter; return sortByNum(a, b) }); setUpanishads(upData)
       }
     })
   }, [])
@@ -280,38 +280,57 @@ export default function Sutras() {
       )}
 
       {/* UPANISHADS TAB */}
-      {tab === 'upanishads' && (
+      {tab === 'upanishads' && !selChapter && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div className="card" style={{ padding: '16px 20px', background: 'linear-gradient(135deg, #AF52DE, #BF5AF2)' }}>
             <p style={{ fontSize: 11, fontWeight: 600, color: 'rgba(255,255,255,0.7)', letterSpacing: '0.04em' }}>THE UPANISHADS</p>
             <p style={{ fontSize: 20, fontWeight: 700, color: '#fff', marginTop: 4 }}>Sitting Near the Truth</p>
-            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', marginTop: 6, lineHeight: 1.6 }}>The philosophical heart of the Vedas. Isha, Kena, Katha, and Mandukya — four windows into the nature of reality.</p>
+            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', marginTop: 6, lineHeight: 1.6 }}>The philosophical heart of the Vedas — flashes of direct insight into the nature of reality.</p>
           </div>
-          {upanishads.filter(v => v.sutra_number !== 'UP.0').length === 0 ? (
-            <div className="card" style={{ padding: '32px 16px', textAlign: 'center' }}><p style={{ color: '#8E8E93' }}>Run the Upanishads SQL in Supabase.</p></div>
+          {[
+            { ch: 8, name: 'Isha Upanishad', desc: 'The Lord Dwells in Everything', count: 18 },
+            { ch: 9, name: 'Kena Upanishad', desc: 'By Whose Power?', count: 35 },
+            { ch: 10, name: 'Katha Upanishad', desc: 'Death as Teacher', count: 120 },
+            { ch: 11, name: 'Mandukya Upanishad', desc: 'The Shortest Path', count: 12 },
+          ].map(u => (
+            <div key={u.ch} onClick={() => setSelChapter(u.ch)} className="card" style={{ padding: 16, cursor: 'pointer' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <p style={{ fontSize: 17, fontWeight: 600 }}>{u.name}</p>
+                  <p style={{ fontSize: 13, color: '#8E8E93', marginTop: 2 }}>{u.desc} · {u.count} verses</p>
+                </div>
+                <span style={{ fontSize: 20, color: '#C7C7CC' }}>›</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* UPANISHADS — Reading a specific Upanishad */}
+      {tab === 'upanishads' && selChapter && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <button onClick={() => setSelChapter(null)} style={{ background: 'none', border: 'none', color: '#AF52DE', fontSize: 15, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', padding: '4px 0' }}>← Back to Upanishads</button>
+          <div className="card" style={{ padding: '12px 16px', background: 'linear-gradient(135deg, #AF52DE, #BF5AF2)' }}>
+            <p style={{ fontSize: 20, fontWeight: 700, color: '#fff' }}>
+              {selChapter === 8 ? 'Isha Upanishad' : selChapter === 9 ? 'Kena Upanishad' : selChapter === 10 ? 'Katha Upanishad' : 'Mandukya Upanishad'}
+            </p>
+          </div>
+          {upanishads.filter(s => s.chapter === selChapter).length === 0 ? (
+            <div className="card" style={{ padding: '32px 16px', textAlign: 'center' }}><p style={{ color: '#8E8E93' }}>No verses loaded yet. Run the SQL for this Upanishad.</p></div>
           ) : (
             <div className="card sutra-reader">
-              {upanishads.filter(v => v.sutra_number !== 'UP.0').map((s, i, arr) => {
-                const isHeader = s.sutra_number.endsWith('.0')
-                if (isHeader) return (
-                  <div key={s.id} style={{ textAlign: 'center', margin: i > 0 ? '28px 0 20px' : '8px 0 20px', padding: '12px 0', borderTop: i > 0 ? '1px solid rgba(175,82,222,0.15)' : 'none' }}>
-                    <p style={{ fontSize: 18, fontWeight: 700, color: '#AF52DE' }}>{s.sanskrit}</p>
-                    <p style={{ fontSize: 12, color: '#8E8E93', marginTop: 4 }}>{s.commentary}</p>
-                  </div>
-                )
-                return (
-                  <div key={s.id} style={{ marginBottom: 28, paddingBottom: 28, borderBottom: i < arr.length - 1 ? '0.5px solid rgba(60,60,67,0.08)' : 'none' }}>
-                    <p style={{ fontSize: 12, fontWeight: 600, color: '#AF52DE', letterSpacing: '0.04em', marginBottom: 8 }}>{s.sutra_number}</p>
-                    <p style={{ fontSize: 17, fontWeight: 600, fontStyle: 'italic', color: '#333', lineHeight: 1.5, marginBottom: 12 }}>{s.sanskrit}</p>
-                    {s.word_meanings && (
-                      <div style={{ background: 'rgba(175,82,222,0.04)', borderLeft: '3px solid #AF52DE', borderRadius: '0 8px 8px 0', padding: '10px 14px', marginBottom: 12 }}>
-                        {s.word_meanings.split(';').map((w: string, j: number) => (<p key={j} style={{ fontSize: 13, color: '#666', lineHeight: 1.5, marginBottom: 1 }}>{w.trim()}</p>))}
-                      </div>
-                    )}
-                    <p style={{ fontSize: 16, lineHeight: 1.85, color: '#333' }}>{s.commentary}</p>
-                  </div>
-                )
-              })}
+              {upanishads.filter(s => s.chapter === selChapter).map((s, i, arr) => (
+                <div key={s.id} style={{ marginBottom: 28, paddingBottom: 28, borderBottom: i < arr.length - 1 ? '0.5px solid rgba(60,60,67,0.08)' : 'none' }}>
+                  <p style={{ fontSize: 12, fontWeight: 600, color: '#AF52DE', letterSpacing: '0.04em', marginBottom: 8 }}>VERSE {s.sutra_number}</p>
+                  <p style={{ fontSize: 17, fontWeight: 600, fontStyle: 'italic', color: '#333', lineHeight: 1.5, marginBottom: 12 }}>{s.sanskrit}</p>
+                  {s.word_meanings && (
+                    <div style={{ background: 'rgba(175,82,222,0.04)', borderLeft: '3px solid #AF52DE', borderRadius: '0 8px 8px 0', padding: '10px 14px', marginBottom: 12 }}>
+                      {s.word_meanings.split(';').map((w: string, j: number) => (<p key={j} style={{ fontSize: 13, color: '#666', lineHeight: 1.5, marginBottom: 1 }}>{w.trim()}</p>))}
+                    </div>
+                  )}
+                  <p style={{ fontSize: 16, lineHeight: 1.85, color: '#333' }}>{s.commentary}</p>
+                </div>
+              ))}
             </div>
           )}
         </div>
