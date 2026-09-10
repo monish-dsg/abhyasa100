@@ -101,13 +101,34 @@ export default function Dashboard() {
   const cz = lw ? (lw <= 66 ? { l: 'Shunya', sub: 'Void · Goal Achieved', c: '#FFD700', icon: '🕉️', teaching: 'Nothing left to carry' } : ZONES.find(z => lw <= z.f && lw > z.t) || ZONES[0]) : null
   const wpct = lw ? Math.max(0, Math.min(100, Math.round(((82-lw)/(82-66))*100))) : 0
 
-  // Weekly
-  const cwk = dayData.filter(l => l.day >= (weekNum-1)*7+1 && l.day <= weekNum*7)
-  const lwk = dayData.filter(l => l.day >= (weekNum-2)*7+1 && l.day <= (weekNum-1)*7)
-  const twAvg = cwk.length ? Math.round((cwk.reduce((a,d) => a+d.score,0)/cwk.length)*10)/10 : 0
-  const lwAvg = lwk.length ? Math.round((lwk.reduce((a,d) => a+d.score,0)/lwk.length)*10)/10 : 0
-  const best = cwk.length ? cwk.reduce((b,d) => d.score > b.score ? d : b, cwk[0]) : null
-  const worst = cwk.length ? cwk.reduce((w,d) => d.score < w.score ? d : w, cwk[0]) : null
+  // Weakest habit insight
+  const thisWkHabits = habits.filter(h => h.day >= (weekNum-1)*7+1 && h.day <= weekNum*7)
+  const lastWkHabits = habits.filter(h => h.day >= (weekNum-2)*7+1 && h.day <= (weekNum-1)*7)
+  const ALL_HABITS = [
+    { k: 'omad', l: 'OMAD' }, { k: 'workout_10k', l: 'Workout' }, { k: 'clean_eating', l: 'Clean Eating' },
+    { k: 'meditate', l: 'Meditate' }, { k: 'manifest', l: 'Manifest' }, { k: 'sleep_well', l: 'Sleep Well' },
+    { k: 'yoga_sutras', l: 'YogaSutras' }, { k: 'zero_inbox', l: 'Zero Inbox' }, { k: 'no_content', l: 'No Content' }, { k: 'hydrated', l: 'Hydrated' },
+  ]
+  const habitRates = ALL_HABITS.map(h => {
+    const tw = thisWkHabits.length ? thisWkHabits.filter(d => d[h.k]).length : 0
+    const lw = lastWkHabits.length ? lastWkHabits.filter(d => d[h.k]).length : 0
+    return { ...h, tw, lw, twPct: thisWkHabits.length ? Math.round((tw/thisWkHabits.length)*100) : 0, lwPct: lastWkHabits.length ? Math.round((lw/lastWkHabits.length)*100) : 0 }
+  })
+  const weakest = habitRates.length ? habitRates.reduce((w, h) => h.twPct < w.twPct ? h : w, habitRates[0]) : null
+
+  // Score trend data
+  const scoreTrend = dayData.map(d => ({ day: `D${d.day}`, score: d.score }))
+
+  // Weight moving average (7-day)
+  const weightMA = weights.map((w, i) => {
+    const window = weights.slice(Math.max(0, i - 6), i + 1)
+    const ma = Math.round((window.reduce((s, x) => s + x.weight, 0) / window.length) * 10) / 10
+    return { day: `D${w.day}`, weight: w.weight, trend: ma }
+  })
+
+  // Next element distance
+  const nextZone = lw ? ZONES.find(z => lw > z.t && lw <= z.f) : null
+  const kgToNext = nextZone && lw ? Math.round((lw - nextZone.t) * 10) / 10 : null
 
   const wkData: { week: number, score: number, color: string, days: number }[] = []
   for (let w = 1; w <= weekNum; w++) { const ds = dayData.filter(l => l.day >= (w-1)*7+1 && l.day <= w*7); if (ds.length > 0) { const a = ds.reduce((s,l) => s+(l.score||0),0)/ds.length; const p = a*10; wkData.push({ week: w, score: Math.round(a*10)/10, color: p > 80 ? 'Green' : p >= 40 ? 'Amber' : 'Red', days: ds.length }) } }
@@ -203,27 +224,62 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {wd.length > 1 && (
-        <div className="card graph-card"><h3>Weight Journey</h3>
-          <ResponsiveContainer width="100%" height={160}><LineChart data={wd}><XAxis dataKey="day" tick={{ fontSize: 10 }} /><YAxis domain={['auto','auto']} tick={{ fontSize: 10 }} width={35} /><Tooltip /><ReferenceLine y={66} stroke="#FFD700" strokeDasharray="3 3" /><Line type="monotone" dataKey="weight" stroke="#FF2D55" strokeWidth={2} dot={{ r: 3 }} /></LineChart></ResponsiveContainer>
+      {weightMA.length > 1 && (
+        <div className="card graph-card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+            <h3>Weight Journey</h3>
+            {kgToNext && nextZone && <span style={{ fontSize: 11, color: nextZone.c, fontWeight: 600 }}>{kgToNext}kg to {nextZone.icon} {nextZone.l}</span>}
+          </div>
+          <ResponsiveContainer width="100%" height={170}>
+            <LineChart data={weightMA}>
+              <XAxis dataKey="day" tick={{ fontSize: 9 }} />
+              <YAxis domain={['auto','auto']} tick={{ fontSize: 9 }} width={32} />
+              <Tooltip />
+              <ReferenceLine y={66} stroke="#FFD700" strokeDasharray="3 3" />
+              <Line type="monotone" dataKey="weight" stroke="#FF2D5544" strokeWidth={1} dot={{ r: 2, fill: '#FF2D55' }} name="Actual" />
+              <Line type="monotone" dataKey="trend" stroke="#FF2D55" strokeWidth={2.5} dot={false} name="Trend" />
+            </LineChart>
+          </ResponsiveContainer>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 4, fontSize: 10, color: '#AEAEB2' }}>
+            <span><span style={{ color: '#FF2D5544' }}>●</span> Daily</span>
+            <span><span style={{ color: '#FF2D55' }}>—</span> 7-day trend</span>
+            <span><span style={{ color: '#FFD700' }}>---</span> Shunya (66kg)</span>
+          </div>
         </div>
       )}
 
-      {cwk.length > 0 && (
-        <div className="card" style={{ padding: 16 }}>
-          <p style={{ fontSize: 15, fontWeight: 600, marginBottom: 10 }}>Week {weekNum} Summary</p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
-            <div style={{ background: '#F2F2F7', borderRadius: 10, padding: 12, textAlign: 'center' }}>
-              <p style={{ fontSize: 22, fontWeight: 700, color: twAvg*10 > 80 ? '#34C759' : twAvg*10 >= 40 ? '#FF9500' : '#FF3B30' }}>{twAvg}</p>
-              <p style={{ fontSize: 10, color: '#8E8E93' }}>This week</p>
-            </div>
-            <div style={{ background: '#F2F2F7', borderRadius: 10, padding: 12, textAlign: 'center' }}>
-              <p style={{ fontSize: 22, fontWeight: 700, color: '#8E8E93' }}>{lwAvg || '—'}</p>
-              <p style={{ fontSize: 10, color: '#8E8E93' }}>Last week</p>
-              {lwAvg > 0 && <p style={{ fontSize: 10, color: twAvg >= lwAvg ? '#34C759' : '#FF3B30', marginTop: 2 }}>{twAvg >= lwAvg ? '↑' : '↓'} {Math.abs(twAvg-lwAvg).toFixed(1)}</p>}
-            </div>
+      {/* Score Trend */}
+      {scoreTrend.length > 3 && (
+        <div className="card graph-card">
+          <h3>Score Trend</h3>
+          <ResponsiveContainer width="100%" height={120}>
+            <LineChart data={scoreTrend}>
+              <XAxis dataKey="day" tick={{ fontSize: 9 }} />
+              <YAxis domain={[0, 10]} tick={{ fontSize: 9 }} width={24} />
+              <Tooltip />
+              <ReferenceLine y={8} stroke="#34C759" strokeDasharray="3 3" />
+              <Line type="monotone" dataKey="score" stroke="#5856D6" strokeWidth={2} dot={{ r: 2, fill: '#5856D6' }} />
+            </LineChart>
+          </ResponsiveContainer>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 4, fontSize: 10, color: '#AEAEB2' }}>
+            <span><span style={{ color: '#5856D6' }}>—</span> Daily score</span>
+            <span><span style={{ color: '#34C759' }}>---</span> Green zone (8+)</span>
           </div>
-          {best && worst && <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, fontSize: 12 }}><span style={{ color: '#34C759' }}>Best: Day {best.day} ({best.score}/10)</span><span style={{ color: '#FF3B30' }}>Worst: Day {worst.day} ({worst.score}/10)</span></div>}
+        </div>
+      )}
+
+      {/* Weakest Habit Insight */}
+      {weakest && thisWkHabits.length > 0 && (
+        <div className="card" style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(255,59,48,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>🎯</div>
+          <div style={{ flex: 1 }}>
+            <p style={{ fontSize: 10, fontWeight: 700, color: '#FF3B30', letterSpacing: '0.06em' }}>FOCUS THIS WEEK</p>
+            <p style={{ fontSize: 14, fontWeight: 600, color: '#1C1C1E', marginTop: 2 }}>{weakest.l}</p>
+            <p style={{ fontSize: 12, color: '#8E8E93', marginTop: 1 }}>
+              {weakest.tw}/{thisWkHabits.length} days this week
+              {weakest.lwPct > 0 && <span style={{ color: weakest.twPct >= weakest.lwPct ? '#34C759' : '#FF3B30' }}> · {weakest.twPct >= weakest.lwPct ? '↑' : '↓'} from {weakest.lwPct}% last week</span>}
+            </p>
+          </div>
         </div>
       )}
 
