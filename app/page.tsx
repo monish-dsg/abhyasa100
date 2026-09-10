@@ -16,11 +16,11 @@ function fmtShort(d: string) { return new Date(d + 'T12:00:00').toLocaleDateStri
 
 const CM: Record<string, string> = { Green: '#34C759', Amber: '#FF9500', Red: '#FF3B30' }
 const ZONES = [
-  { z: 1, f: 82, t: 79, l: 'Zone 1', c: '#FF3B30' },
-  { z: 2, f: 79, t: 76, l: 'Zone 2', c: '#FF9500' },
-  { z: 3, f: 76, t: 73, l: 'Zone 3', c: '#FFD60A' },
-  { z: 4, f: 73, t: 70, l: 'Zone 4', c: '#34C759' },
-  { z: 5, f: 70, t: 67, l: 'Zone 5', c: '#30D158' },
+  { z: 1, f: 82, t: 79, l: 'Prithvi', sub: 'Earth · Grounding', c: '#8B6914', icon: '🪨', teaching: 'Shed the heaviness' },
+  { z: 2, f: 79, t: 76, l: 'Jala', sub: 'Water · Flow', c: '#0A84FF', icon: '🌊', teaching: 'Release resistance' },
+  { z: 3, f: 76, t: 73, l: 'Agni', sub: 'Fire · Transformation', c: '#FF3B30', icon: '🔥', teaching: 'Burn through' },
+  { z: 4, f: 73, t: 70, l: 'Vayu', sub: 'Wind · Lightness', c: '#30D158', icon: '🌬️', teaching: 'Momentum builds' },
+  { z: 5, f: 70, t: 66, l: 'Akasha', sub: 'Space · Pure Form', c: '#5856D6', icon: '✨', teaching: 'Approaching emptiness' },
 ]
 const SUTRAS = [
   { r: '1.2', t: 'Yoga is the cessation of the movements of the mind.' },
@@ -98,8 +98,8 @@ export default function Dashboard() {
   const perfect = dayData.filter(d => d.score === 10).length
 
   // Weight zone
-  const cz = lw ? (lw <= 67 ? { l: 'Goal Achieved! 🏆', c: '#5856D6' } : ZONES.find(z => lw <= z.f && lw > z.t) || ZONES[0]) : null
-  const wpct = lw ? Math.max(0, Math.min(100, Math.round(((82-lw)/(82-67))*100))) : 0
+  const cz = lw ? (lw <= 66 ? { l: 'Shunya', sub: 'Void · Goal Achieved', c: '#FFD700', icon: '🕉️', teaching: 'Nothing left to carry' } : ZONES.find(z => lw <= z.f && lw > z.t) || ZONES[0]) : null
+  const wpct = lw ? Math.max(0, Math.min(100, Math.round(((82-lw)/(82-66))*100))) : 0
 
   // Weekly
   const cwk = dayData.filter(l => l.day >= (weekNum-1)*7+1 && l.day <= weekNum*7)
@@ -146,19 +146,47 @@ export default function Dashboard() {
       </div>
 
       {lw && (
-        <div className="card" style={{ padding: 16 }}>
-          <p style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>Weight Journey → 67kg</p>
-          <div style={{ display: 'flex', gap: 3, marginBottom: 10 }}>
-            {ZONES.map(z => { const inZ = lw !== null && lw <= z.f && lw > z.t; const clr = lw !== null && lw <= z.t; return (
-              <div key={z.z} style={{ flex: 1, textAlign: 'center' }}>
-                <div style={{ height: 8, borderRadius: 4, background: clr ? z.c : inZ ? z.c : '#F2F2F7', opacity: clr ? 1 : inZ ? 0.7 : 0.3 }} />
-                <p style={{ fontSize: 8, fontWeight: 700, color: inZ ? z.c : '#C7C7CC', marginTop: 4 }}>{z.f}-{z.t}</p>
+        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          {/* Current Element Banner */}
+          {cz && (
+            <div style={{ padding: '20px 20px 16px', background: `linear-gradient(135deg, ${cz.c}22, ${cz.c}08)`, borderBottom: `2px solid ${cz.c}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <p style={{ fontSize: 10, fontWeight: 700, color: cz.c, letterSpacing: '0.08em' }}>{(cz as any).sub?.toUpperCase() || 'SHUNYA'}</p>
+                  <p style={{ fontSize: 28, fontWeight: 700, color: '#1C1C1E', marginTop: 4 }}>{(cz as any).icon || '🕉️'} {cz.l}</p>
+                  <p style={{ fontSize: 13, fontStyle: 'italic', color: '#8E8E93', marginTop: 4 }}>{(cz as any).teaching || ''}</p>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <p style={{ fontSize: 32, fontWeight: 700, color: cz.c }}>{lw}</p>
+                  <p style={{ fontSize: 11, color: '#8E8E93' }}>kg</p>
+                </div>
               </div>
-            )})}
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div><span style={{ fontSize: 11, color: '#8E8E93' }}>Now: </span><span style={{ fontSize: 15, fontWeight: 700, color: cz?.c || '#8E8E93' }}>{lw}kg</span>{cz && <span style={{ fontSize: 11, color: cz.c, marginLeft: 6 }}>{cz.l}</span>}</div>
-            <span style={{ fontSize: 11, color: '#8E8E93' }}>{wpct}% to goal</span>
+            </div>
+          )}
+          {/* Element Progress Path */}
+          <div style={{ padding: '16px 20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 12 }}>
+              {ZONES.map((z, i) => {
+                const active = lw !== null && lw <= z.f && lw > z.t
+                const cleared = lw !== null && lw <= z.t
+                return (
+                  <div key={z.z} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                    <div style={{ width: '100%', height: 6, borderRadius: 3, background: cleared ? z.c : active ? z.c : '#F2F2F7', opacity: cleared ? 1 : active ? 0.8 : 0.25, transition: 'all 0.3s' }} />
+                    <span style={{ fontSize: 14, opacity: active ? 1 : cleared ? 0.8 : 0.3 }}>{z.icon}</span>
+                    <span style={{ fontSize: 8, fontWeight: 700, color: active ? z.c : '#C7C7CC' }}>{z.l}</span>
+                  </div>
+                )
+              })}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, minWidth: 36 }}>
+                <div style={{ width: '100%', height: 6, borderRadius: 3, background: lw <= 66 ? '#FFD700' : '#F2F2F7', opacity: lw <= 66 ? 1 : 0.25 }} />
+                <span style={{ fontSize: 14, opacity: lw <= 66 ? 1 : 0.3 }}>🕉️</span>
+                <span style={{ fontSize: 8, fontWeight: 700, color: lw <= 66 ? '#FFD700' : '#C7C7CC' }}>Shunya</span>
+              </div>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#AEAEB2' }}>
+              <span>82kg</span>
+              <span>{wpct}% to Shunya (66kg)</span>
+            </div>
           </div>
         </div>
       )}
@@ -177,7 +205,7 @@ export default function Dashboard() {
 
       {wd.length > 1 && (
         <div className="card graph-card"><h3>Weight Journey</h3>
-          <ResponsiveContainer width="100%" height={160}><LineChart data={wd}><XAxis dataKey="day" tick={{ fontSize: 10 }} /><YAxis domain={['auto','auto']} tick={{ fontSize: 10 }} width={35} /><Tooltip /><ReferenceLine y={67} stroke="#5856D6" strokeDasharray="3 3" /><Line type="monotone" dataKey="weight" stroke="#FF2D55" strokeWidth={2} dot={{ r: 3 }} /></LineChart></ResponsiveContainer>
+          <ResponsiveContainer width="100%" height={160}><LineChart data={wd}><XAxis dataKey="day" tick={{ fontSize: 10 }} /><YAxis domain={['auto','auto']} tick={{ fontSize: 10 }} width={35} /><Tooltip /><ReferenceLine y={66} stroke="#FFD700" strokeDasharray="3 3" /><Line type="monotone" dataKey="weight" stroke="#FF2D55" strokeWidth={2} dot={{ r: 3 }} /></LineChart></ResponsiveContainer>
         </div>
       )}
 
