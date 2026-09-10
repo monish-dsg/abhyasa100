@@ -68,8 +68,23 @@ export default function AddPage() {
   }, [])
 
   const refreshColors = async (aid?: number) => {
-    const { data: dl } = await supabase.from('daily_logs').select('day, color').eq('attempt_id', aid || attemptId).order('day')
-    if (dl) { const dc: Record<number, string> = {}; dl.forEach(d => { dc[d.day] = d.color || '' }); setDayColors(dc) }
+    const a = aid || attemptId
+    const { data: dl } = await supabase.from('daily_logs').select('day').eq('attempt_id', a).order('day')
+    const { data: hb } = await supabase.from('habits').select('*').eq('attempt_id', a).order('day')
+    const dc: Record<number, string> = {}
+    if (dl) {
+      dl.forEach(d => {
+        const h = hb?.find(hab => hab.day === d.day)
+        if (h) {
+          const must = [h.omad, h.workout_10k, h.clean_eating].filter(Boolean).length
+          const bonus = [h.meditate, h.manifest, h.sleep_well, h.yoga_sutras, h.zero_inbox, h.no_content, h.hydrated].filter(Boolean).length
+          const score = Math.round(((must / 3) * 7 + (bonus / 7) * 3) * 10) / 10
+          const pct = score * 10
+          dc[d.day] = pct > 80 ? 'Green' : pct >= 40 ? 'Amber' : 'Red'
+        }
+      })
+    }
+    setDayColors(dc)
   }
 
   const loadDay = async (d: number, aid?: number) => {
