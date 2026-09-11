@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
-export const metadata: Metadata = { title: 'Abhyasa100', description: '100 Week Discipline Challenge' }
+export const metadata: Metadata = { title: 'Abhyasa', description: 'Constant Inner Practice' }
 export const viewport: Viewport = { width: 'device-width', initialScale: 1, maximumScale: 1, userScalable: false }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -10,7 +10,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <nav className="nav-wrap">
           <div className="nav-inner">
-            <a href="/" className="nav-logo">🧘 Abhyasa</a>
+            <a href="/" className="nav-logo" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
+              <svg width="28" height="28" viewBox="0 0 96 96"><circle cx="48" cy="48" r="48" fill="#FF2D55"/><circle cx="48" cy="48" r="10" fill="white"/></svg>
+              <span style={{ fontSize: 18, fontWeight: 600, letterSpacing: 2, color: '#FF2D55' }}>ABHYASA</span>
+            </a>
             <div className="nav-links">
               <a href="/" className="nav-link">Home</a>
               <a href="/checkin" className="nav-link">Add</a>
